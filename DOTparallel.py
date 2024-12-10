@@ -67,9 +67,11 @@ def parse_args():
                         help='MJD before which observations should be processed')
     parser.add_argument('-after', '--after', type=str,nargs=1,default=None,
                         help='MJD after which observations should be processed')
-    parser.add_argument('-bliss', '--bliss', type=str, nargs=1, default=False,
+    parser.add_argument('-bliss', '--bliss', action="store_true",
                         help='set this flag to True if using bliss instead of turboSETI')
+    parser.set_defaults(bliss=False)
     args = parser.parse_args()
+
     # Check for trailing slash in the directory path and add it if absent
     odict = vars(args)
     if odict["datdir"]:
@@ -190,6 +192,7 @@ def main():
     sf = cmd_args["sf"]             # optional, flag to turn off spatial filtering
     before = cmd_args["before"]     # optional, MJD to limit observations
     after = cmd_args["after"]       # optional, MJD to limit observations
+    bliss = cmd_args["bliss"]       # optional, set True if using bliss
 
     # create the output directory if the specified path does not exist
     if not os.path.isdir(outdir):

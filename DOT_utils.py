@@ -55,7 +55,7 @@ def get_elapsed_time(start=0):
 def check_logs(log, bliss=False):
     status="fine"
     if bliss == True:
-        print("Logging disabled (likely for functionality between bliss and NBeamAnalysis), see also edit t>
+        print("Logging disabled (likely for functionality between bliss and NBeamAnalysis), see also edit to get_dats")
     else:
         searchfile = open(log,'r').readlines()
         if os.path.exists(log)==False:

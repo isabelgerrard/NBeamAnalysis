@@ -150,7 +150,7 @@ def filter_df(df,column,operator,value):
 def default_filter(df,sf,cutnum,num_backup_plots):
     print(f"\nDefault filtering:")
     print(f"Up to the {cutnum} lowest correlation scores with an SNR-ratio above the attenuation value of {sf:.2f}\n")
-    print(f"Barring that, up to the {num_backup_plots} above the cuttof will be plotted")
+    print(f"Barring that, up to the {num_backup_plots} above the cutoff will be plotted")
     xcutoff=np.linspace(-0.05,1.05,1000)
     ycutoff=np.array([0.9*sf*max(j-0.05,0)**(1/3) for j in xcutoff])
     dfx=df[np.interp(df.corrs,xcutoff,ycutoff)<df.SNR_ratio].reset_index(drop=True)
