@@ -67,6 +67,8 @@ def parse_args():
                         help='MJD before which observations should be processed')
     parser.add_argument('-after', '--after', type=str,nargs=1,default=None,
                         help='MJD after which observations should be processed')
+    parser.add_argument('-bliss', '--bliss', type=str, nargs=1, default=False,
+                        help='set this flag to True if using bliss instead of turboSETI')
     args = parser.parse_args()
     # Check for trailing slash in the directory path and add it if absent
     odict = vars(args)
@@ -217,7 +219,7 @@ def main():
     logging.info(f"Initial CPU usage for each of the {os.cpu_count()} cores:\n{psutil.cpu_percent(percpu=True)}")
 
     # find and get a list of tuples of all the dat files corresponding to each subset of the observation
-    dat_files,errors = DOT.get_dats(datdir,beam)
+    dat_files,errors = DOT.get_dats(datdir,beam,bliss)
     # make sure dat_files is not empty
     if not dat_files:
         logging.info(f'\n\tERROR: No .dat files found in subfolders.'+

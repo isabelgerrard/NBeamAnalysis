@@ -10,13 +10,13 @@ These scripts will recursively scan all subfolders of the input directories for 
 ## Processing pipeline steps:
 
 1. Use the basic_tseti.sh bash script to run a dedoppler search on all beamformed filterbank files using turboSETI, with or without fscrunch for higher drift rate coverage.
-    - input: h5 or fil files 
+    - input: h5 or fil files (robust to .fbh5 file extensions as well)
     - output: dat and log files
     - fscrunch allows increased sensitivity to larger drift rates
     - adjust the script as needed for your case
 
 2. DOTnbeam.py (or the parallelized version DOTparallel.py) uses functions in DOT_utils.py to score signals in the target beam as compared to the off-target beam, and compute the amount of attenuation in the beams with a SNR-ratio.
-    - input: h5s/fils, dats and logs 
+    - input: h5s/fils, dats and logs from either turboSETI or bliss (indicate bliss=True if necessary)
     - output: stats histograms, SNR-ratio vs correlation score plot, output log, and csv
     - optional with -sf flag: Cross references hits with identical frequencies (within 2 Hz) and similar SNRs to pare down the hit list.
     - correlates power over the frequency range of each hit in the target beam with the other beams using a fancy dot product (hence the name)
@@ -29,6 +29,7 @@ These scripts will recursively scan all subfolders of the input directories for 
     - output: waterfall plots
     - input arguments allow for filtering of csv
     - defaults to 500 lowest scored hits with SNR-ratios above the attenuation value (default=4.0)
+    - can be specified to plot more hits above a particular SNR-ratio cutoff and fewer below that cutoff using num_backup_plots keyword
 
 ### Pipeline scripts
 basic_tseti.sh

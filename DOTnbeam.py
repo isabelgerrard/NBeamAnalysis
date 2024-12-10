@@ -1,4 +1,4 @@
-'''
+w'''
 This is the serial version of the code. It does the same thing as DOTparallel.py, 
 but processes one dat file at a time and utilizes pickle states for resuming an interrupted process.
 
@@ -61,6 +61,8 @@ def parse_args():
                         help='MJD before which observations should be processed')
     parser.add_argument('-after', '--after', type=str,nargs=1,default=None,
                         help='MJD after which observations should be processed')
+    parser.add_argument('-bliss', '--bliss', type=str,nargs=1,default=False,
+                        help='set this flag to True if using bliss instead of turboSETI')
     args = parser.parse_args()
     # Check for trailing slash in the directory path and add it if absent
     odict = vars(args)
@@ -104,6 +106,7 @@ def main():
     store = cmd_args["store"]       # optional, flag to retain pickle files
     before = cmd_args["before"]     # optional, MJD to limit observations
     after = cmd_args["after"]       # optional, MJD to limit observations
+    bliss = cmd_args["bliss"]       # optional, for using bliss
 
     # create the output directory if the specified path does not exist
     if not os.path.isdir(outdir):
@@ -132,7 +135,7 @@ def main():
     logging.info("\nExecuting program...\n")
 
     # find and get a list of tuples of all the dat files corresponding to each subset of the observation
-    dat_files,errors = DOT.get_dats(datdir,beam)
+    dat_files,errors = DOT.get_dats(datdir,beam,bliss)
     # make sure dat_files is not empty
     if not dat_files:
         logging.info(f'\n\tERROR: No .dat files found in subfolders.'+
@@ -174,7 +177,7 @@ def main():
         # fils=sorted(glob.glob(fildir+subdirectories+fil_MJD+'*fil'))
         fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*fil'))
         if not fils:
-            fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*h5'))
+            fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-9]+'????*fbh5'))
         if not fils:
             logging.info(f'\tWARNING! Could not locate filterbank files in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
             logging.info(f'\tSkipping this dat file...')

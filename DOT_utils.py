@@ -52,17 +52,21 @@ def get_elapsed_time(start=0):
     return end, time_label
 
 # check log file for completeness
-def check_logs(log):
+def check_logs(log, bliss=False):
     status="fine"
-    searchfile = open(log,'r').readlines()
-    if os.path.exists(log)==False:
-        return "incomplete"
-    if searchfile[-1]!='===== END OF LOG\n':
-        status="incomplete"
+    if bliss == True:
+        print("Logging disabled (likely for functionality between bliss and NBeamAnalysis), see also edit t>
+    else:
+        searchfile = open(log,'r').readlines()
+        if os.path.exists(log)==False:
+            logging.info("Can't find log file...")
+            return "incomplete"
+        if searchfile[-1]!='===== END OF LOG\n':
+            status="incomplete"
     return status
 
 # retrieve a list of .dat files, each with the full path of each .dat file for the target beam
-def get_dats(root_dir,beam):
+def get_dats(root_dir,beam,bliss):
     """Recursively finds all files with the '.dat' extension in a directory
     and its subdirectories, and returns a list of the full paths of files 
     where each file corresponds to the target beam."""
@@ -75,7 +79,7 @@ def get_dats(root_dir,beam):
         for f in filenames:
             if f.endswith('.dat') and f.split('beam')[-1].split('.')[0]==beam:
                 log_file = os.path.join(dirpath, f).replace('.dat','.log')
-                if check_logs(log_file)=="incomplete" or not os.path.isfile(log_file):
+                if check_logs(log_file, bliss=bliss)=="incomplete": #or not os.path.isfile(log_file): <---- this is the edit to get_dats()
                     logging.info(f"{log_file} is incomplete. Please check it. Skipping this file...")
                     errors+=1
                     continue

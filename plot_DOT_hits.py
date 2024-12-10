@@ -75,6 +75,8 @@ def parse_args():
                         help='optional flag to zoom in/out plot in frequency space')
     parser.add_argument('-sf', type=float, default=4.0,
                         help='optional attenuation value for filtering')
+    parser.add_argument('-num_backup_plots', type=int, default=1,
+                        help='specifies how many plots to create if none pass the sf threshold')
     parser.add_argument('-cutoff', type=int, default=500,
                         help='optionally set the number of plots above cutoff in default plotting mode')
     parser.add_argument('-clobber', action='store_true',
@@ -145,21 +147,22 @@ def filter_df(df,column,operator,value):
     return signals_of_interest
 
 # default filtering
-def default_filter(df,sf,cutnum):
+def default_filter(df,sf,cutnum,num_backup_plots):
     print(f"\nDefault filtering:")
     print(f"Up to the {cutnum} lowest correlation scores with an SNR-ratio above the attenuation value of {sf:.2f}\n")
+    print(f"Barring that, up to the {num_backup_plots} above the cuttof will be plotted")
     xcutoff=np.linspace(-0.05,1.05,1000)
     ycutoff=np.array([0.9*sf*max(j-0.05,0)**(1/3) for j in xcutoff])
     dfx=df[np.interp(df.corrs,xcutoff,ycutoff)<df.SNR_ratio].reset_index(drop=True)
     dfx=dfx.sort_values(by='SNR_ratio',ascending=False).reset_index(drop=True)
-    if len(dfx[dfx.SNR_ratio>sf])>cutnum:
-        dfx=dfx[dfx.SNR_ratio>sf].reset_index(drop=True)
-        signals_of_interest = dfx.sort_values(by='corrs',ascending=True).reset_index(drop=True).iloc[:cutnum]
+    dfsf=dfx[dfx.SNR_ratio>sf].reset_index(drop=True)
+    if len(dfsf)>cutnum:
+        signals_of_interest = dfsf.sort_values(by='corrs',ascending=True).reset_index(drop=True).iloc[:cutnum]
     else:
-        signals_of_interest = dfx.iloc[:cutnum]
+        signals_of_interest = dfsf.iloc[:cutnum]
     if signals_of_interest.empty==True:
-        print(f"Warning: Default filtering produced an empty dataset. Reverting to lowest socres of the original dataset.\n")
-        signals_of_interest=df
+        print(f"Warning: Default filtering produced an empty dataset. Reverting to lowest scores of the original dataset.\n")
+        signals_of_interest = dfx.sort_values(by='corrs',ascending=True).reset_index(drop=True).iloc[:num_backup_plots]
     return signals_of_interest
 
 # optional, skip hits that are outside input MJD bounds
@@ -224,6 +227,7 @@ def main():
     nbeams = cmd_args["nbeams"]         # optional, default = 2
     tbeam = cmd_args["tbeam"]           # optional, default = 0
     sf = cmd_args["sf"]                 # optional, default = 4.0
+    num_backup_plots = cmd_args["num_backup_plots"] #optional, default = 1
     cutnum = cmd_args["cutoff"]         # optional, default = 500
     clobber = cmd_args["clobber"]       # optional, flag on or default off
     pdf = cmd_args["pdf"]               # optional, flag on or default off
@@ -279,7 +283,7 @@ def main():
         return None
     # plotting mode 2: default plotting
     elif not column or not operator or not value:
-        signals_of_interest = default_filter(df,sf,cutnum)
+        signals_of_interest = default_filter(df,sf,cutnum, num_backup_plots)
     # plotting mode 3: custom dataframe filtering from input arguments
     else:
         signals_of_interest = filter_df(df,column,operator,value)
