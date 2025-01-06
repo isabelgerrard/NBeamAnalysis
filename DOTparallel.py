@@ -79,11 +79,12 @@ def parse_args():
 def check_cmd_args(args):
     # Check for trailing slash in the directory path and add it if absent
     odict = args if type(args) == dict else vars(args)
-    if odict["datdir"]:
-        datdir = odict["datdir"][0]
-        if datdir[-1] != "/":
-            datdir += "/"
-        odict["datdir"] = datdir  
+    assert "datdir" in odict, print("No required data directory!")
+    # odict["datdir"] += "/"
+    datdir = odict["datdir"]
+    if datdir[-1] != "/":
+        datdir += "/"
+    odict["datdir"] = datdir  
     if odict["fildir"]:
         fildir = odict["fildir"][0]
         if fildir[-1] != "/":
@@ -137,7 +138,6 @@ def dat_to_dataframe(args):
         fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*fil'))
         if not fils:
             fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*h5'))
-        if not fils:
             logging.info(f'\tWARNING! Could not locate filterbank files in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
             logging.info(f'\tSkipping...\n')
             skipped+=1
@@ -360,4 +360,4 @@ def main(cmd_args):
 if __name__ == "__main__":
     # in this case the arguments are given as command line arguments
     cmd_args = parse_args()
-    main()
+    main(cmd_args)
