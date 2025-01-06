@@ -72,8 +72,13 @@ def parse_args():
     parser.set_defaults(bliss=False)
     args = parser.parse_args()
 
+    args = check_cmd_args(args)
+    
+    return args
+
+def check_cmd_args(args):
     # Check for trailing slash in the directory path and add it if absent
-    odict = vars(args)
+    odict = args if type(args) == dict else vars(args)
     if odict["datdir"]:
         datdir = odict["datdir"][0]
         if datdir[-1] != "/":
@@ -93,6 +98,16 @@ def parse_args():
         odict["outdir"] = outdir  
     else:
         odict["outdir"] = ""
+
+    # Set defaults when not using parser bc not using cmd line args
+    if "beam" not in odict:
+        odict["beam"] = "0"
+    if "ncore" not in odict:
+        odict["ncore"] = None
+    if "after" not in odict:
+        odict["after"] = None
+    if "bliss" not in odict:
+        odict["bliss"] = False
     # Returns the input argument as a labeled array
     return odict
 
@@ -170,7 +185,7 @@ def dat_to_dataframe(args):
 
 
     # Main program execution
-def main():
+def main(cmd_args):
     start=time.time()
 
     global exit_flag
@@ -181,7 +196,7 @@ def main():
     monitor_thread.start()
 
     # parse the command line arguments
-    cmd_args = parse_args()
+    # cmd_args = parse_args()
     datdir = cmd_args["datdir"]     # required input
     fildir = cmd_args["fildir"]     # optional (but usually necessary)
     beam = cmd_args["beam"][0]      # optional, default = 0
@@ -216,6 +231,9 @@ def main():
             if completion_code in line:
                 os.remove(logfile)
                 break
+    
+    # file_handler = logging.FileHandler(log_filename) giving permission denied 
+    logfile = f"{os.getcwd()}/{logfile}"
     DOT.setup_logging(logfile)
     logger = logging.getLogger()
     logging.info("\nExecuting program...")
@@ -264,7 +282,7 @@ def main():
     total_exact_matches = sum(exact_matches)
 
     if sf==None:
-        sf=4
+        sf=4 
 
     if 'SNR_ratio' in full_df.columns and full_df['SNR_ratio'].notnull().any():
         # plot the histograms for hits within the target beam
@@ -340,4 +358,6 @@ def main():
     return None
 # run it!
 if __name__ == "__main__":
+    # in this case the arguments are given as command line arguments
+    cmd_args = parse_args()
     main()

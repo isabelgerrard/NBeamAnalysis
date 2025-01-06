@@ -211,12 +211,12 @@ def limit_by_frange(df,fbelow,fabove):
 
 
     # Main program execution
-def main():
+def main(cmd_args):
     print("\nExecuting program...")
     start=time.time()
 
     # parse any command line arguments
-    cmd_args = parse_args()
+    # cmd_args = parse_args()
     csv = cmd_args["csv"][0]            # required input
     outdir = cmd_args["outdir"]         # optional, default to datdir listed in csv
     column = cmd_args["col"]            # optional, default None
@@ -368,4 +368,5 @@ def main():
     return None
 # run it!
 if __name__ == "__main__":
-    main()
+    cmd_args = parse_args()
+    main(cmd_args)
