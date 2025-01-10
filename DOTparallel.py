@@ -86,14 +86,16 @@ def check_cmd_args(args):
         datdir += "/"
     odict["datdir"] = datdir  
     if odict["fildir"]:
-        fildir = odict["fildir"][0]
+        # fildir = odict["fildir"][0]
+        fildir = odict["fildir"]
         if fildir[-1] != "/":
             fildir += "/"
         odict["fildir"] = fildir  
     else:
         odict["fildir"] = datdir
     if odict["outdir"]:
-        outdir = odict["outdir"][0]
+        # outdir = odict["outdir"][0]
+        outdir = odict["outdir"]
         if outdir[-1] != "/":
             outdir += "/"
         odict["outdir"] = outdir  
@@ -137,7 +139,9 @@ def dat_to_dataframe(args):
         # fils=sorted(glob.glob(fildir+subdirectories+fil_MJD+'*fil'))
         fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*fil'))
         if not fils:
+            print("No fil files. Looking for fbh5/h5 instead.")
             fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*h5'))
+        if not fils:
             logging.info(f'\tWARNING! Could not locate filterbank files in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
             logging.info(f'\tSkipping...\n')
             skipped+=1
@@ -178,6 +182,7 @@ def dat_to_dataframe(args):
             return pd.DataFrame(),hits,skipped,exact_matches
         else:
             logging.info(f"\tCombing through the remaining {len(df)} hits.")
+            print(np.shape(df))
             temp_df = DOT.comb_df(df,outdir,obs,pickle_off=True,sf=sf)
         mid, time_label = DOT.get_elapsed_time(start)
         logging.info(f"Finished processing in %.2f {time_label}." %mid)
@@ -233,7 +238,8 @@ def main(cmd_args):
                 break
     
     # file_handler = logging.FileHandler(log_filename) giving permission denied 
-    logfile = f"{os.getcwd()}/{logfile}"
+    # logfile = f"{os.getcwd()}/{logfile}"
+    logfile = logfile
     DOT.setup_logging(logfile)
     logger = logging.getLogger()
     logging.info("\nExecuting program...")
@@ -274,7 +280,9 @@ def main(cmd_args):
 
     # Concatenate the dataframes into a single dataframe
     full_df = pd.concat(result_dataframes, ignore_index=True)
-    full_df.to_csv(f"{outdir}{obs}_DOTnbeam.csv")
+    test_dst = os.path.join(os.getcwd(), f"{outdir}{obs}_DOTnbeam.csv")
+    full_df.to_csv(test_dst)
+    print(np.shape(full_df))
 
     # Do something with the counters if needed
     total_hits = sum(hits)
