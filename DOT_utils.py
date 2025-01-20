@@ -181,14 +181,21 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     if sf==None:
         sf=4
     # loop over every row in the dataframe
+    # TODO are some of these items the same for every row in which case can set outside loop and save some time?
     for r,row in df.iterrows():
+        # print(r)
+        # print(row) # TODO a single row is a formatted single string of multiple columns? :/
         if resume_index is not None and r < resume_index:
             continue  # skip rows before the resume index
         # identify the target beam .fil file 
+        print("1) is it this taking a while?")
         matching_col = row.filter(like='fil_').apply(lambda x: x == row['dat_name']).idxmax()
+        print("done")
         target_fil = row[matching_col]
         # get the filterbank metadata
+        print("2) is it this taking a while?")
         fil_meta = bl.Waterfall(target_fil,load_data=False)
+        print("done")
         # determine the frequency boundaries in the .fil file
         minimum_frequency = fil_meta.container.f_start
         maximum_frequency = fil_meta.container.f_stop
@@ -219,6 +226,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         mySNRs=[SNR0]
         SNR_ratios=[]
         for col_name, other_fil in other_cols.iteritems():
+            # print(col_name)
             # grab the signal data from the non-target fil in the same location
             _,s1=wf_data(other_fil,f1,f2)
             # calculate and append the SNR for the same location in the other beam
@@ -230,9 +238,12 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
             corrs.append(sig_cor(s0-noise_median(s0),s1-noise_median(s1)))
             # x scores no longer used
             # xs.append(min(corrs[-1]/(SNR_ratios[-1]/sf),1.0)) 
+
         # add the correlation scores, SNRs and SNR-ratios to the dataframe
-        for i,x in enumerate(SNR_ratios):
-            col_name_corrs='corrs_'+other_cols[i].split('beam')[-1].split('.')[0]
+        # TODO not doing anything with SNR ratio value her e- can be vectorized 
+        for i,x in enumerate(SNR_ratios): # TODO SNR_RATIOS is always shape 1?
+            # print("\n Entering SNR_ratios loop")
+            col_name_corrs='corrs_'+other_cols[i].split('beam')[-1].split('.')[0] # TODO this is always 0001 ?
             df.loc[r,col_name_corrs] = corrs[i]
             col_name_SNRr='SNR_ratio_'+other_cols[i].split('beam')[-1].split('.')[0]
             df.loc[r,col_name_SNRr] = SNR_ratios[i]
