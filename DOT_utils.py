@@ -188,14 +188,14 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         if resume_index is not None and r < resume_index:
             continue  # skip rows before the resume index
         # identify the target beam .fil file 
-        print("1) is it this taking a while?")
+        # print("1) is it this taking a while?")
         matching_col = row.filter(like='fil_').apply(lambda x: x == row['dat_name']).idxmax()
-        print("done")
+        # print("done")
         target_fil = row[matching_col]
         # get the filterbank metadata
-        print("2) is it this taking a while?")
+        # print("2) is it this taking a while?")
         fil_meta = bl.Waterfall(target_fil,load_data=False)
-        print("done")
+        # print("done")
         # determine the frequency boundaries in the .fil file
         minimum_frequency = fil_meta.container.f_start
         maximum_frequency = fil_meta.container.f_stop
