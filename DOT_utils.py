@@ -115,6 +115,7 @@ def load_dat_df(dat_file,filtuple):
     return full_dat_df
 
 # use blimpy to grab the data slice from the filterbank file over the frequency range provided
+"""ATTENTION - this takes .5 sec about 1300 calls"""
 def wf_data(fil,f1,f2):
     return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
 
@@ -194,7 +195,19 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         target_fil = row[matching_col]
         # get the filterbank metadata
         # print("2) is it this taking a while?")
-        fil_meta = bl.Waterfall(target_fil,load_data=False)
+        """ATTENTION - I think this is taking the most time 
+        ~ .5 seconds and called ~2000 times
+        esp the hdf reader
+        specifically dataset.py ? and being called almost 3 times per call of waterfall?
+        """"
+        try:
+            fil_meta = bl.Waterfall(target_fil,load_data=False)
+        except Exception as e:
+            print("FAILED : fil_meta = bl.Waterfall(target_fil, load_data=False)")
+            print(e)
+            logging.info(f"Failed to load fil meta with bl.Waterfall for\n{r}\n{row}\n{target_fil}\nskipping this row...")
+            continue
+        """END - ATTN"""
         # print("done")
         # determine the frequency boundaries in the .fil file
         minimum_frequency = fil_meta.container.f_start
@@ -215,6 +228,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         f1=round(max(fmid-half_span*1e-6,minimum_frequency),6)
         f2=round(min(fmid+half_span*1e-6,maximum_frequency),6)
         # grab the signal data in the target beam fil file
+        """ATTENTION - this calls wf_data which takes .5s and about 1000 calls but seems like calling waterfall twice? """
         frange,s0=wf_data(target_fil,f1,f2)
         # calculate the SNR
         SNR0 = mySNR(s0)
