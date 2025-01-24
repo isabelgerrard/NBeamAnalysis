@@ -121,7 +121,7 @@ def dat_to_dataframe(args):
     dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
     start = time.time()
 
-    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Finer/DOTParallel2/data_to_dataframe/"+dat+"/"
+    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Finer/DOTParallel_debug/data_to_dataframe/"+dat+"/"
     dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=RESTART)
 
     """ATTENTION - 0.0, 132m, 136m, 76m, 64m, 84m, 125m, 190m, 75m, 0.0, 3m, 69m, 38m
@@ -252,7 +252,7 @@ def dat_to_dataframe(args):
             comb_df_profiler = profile_manager.start_profiler("proc", "6_DOT.comb_df", dd_time_dst, restart=RESTART)
             comb_profiler.add_section(f"\tCombing through the remaining {len(df)} hits.")
             logging.info(f"\tCombing through the remaining {len(df)} hits.")
-            print(np.shape(df))
+            # print(np.shape(df))
             temp_df = DOT.comb_df(df,outdir,obs,pickle_off=True,sf=sf)
             comb_df_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(comb_df_profiler)
@@ -268,7 +268,7 @@ def dat_to_dataframe(args):
 
     # Main program execution
 def main(cmd_args):
-    scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Finer/DOTParallel2/"
+    scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Finer/DOTParallel_debug/"
     dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=RESTART)
 
     """OKAY - Threading takes 0.0 seconds"""
@@ -383,7 +383,9 @@ def main(cmd_args):
 
     """ATTENTION - takes 3+ HOURS"""
     parallel_profiler.add_section("Execute parallelized function")
-    input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files]
+    # todo 
+    # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files]
+    input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files[:2]]
     with Pool(num_processes) as pool:
         results = pool.map(dat_to_dataframe, input_args)
 
