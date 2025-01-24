@@ -9,10 +9,13 @@ import time
 import os
 import glob
 import argparse
-import blimpy as bl
-import logging
 import sys
+sys.path.append("./blimpy")
+import blimpy as bl
+# from blimpy.io import hdf_reader
+import logging
 
+# hdf_reader.examine_h5(None)
 # logging function
 def setup_logging(log_filename):
     # Import the logging module and configure the root logger
@@ -183,16 +186,45 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         sf=4
     # loop over every row in the dataframe
     # TODO are some of these items the same for every row in which case can set outside loop and save some time?
-    for r,row in df.iterrows():
+    first = True
+    main_fil = ""
+    always_the_same = []
+    """
+    Same target_fil for every row in a given data frame = always same metadata
+    Don't recalc metadata constants for each hit
+    """
+    # identify the target beam .fil file
+    first_row = df.iloc[0]
+    matching_col = first_row.filter(like='fil_').apply(lambda x: x == first_row['dat_name']).idxmax()
+    target_fil = first_row[matching_col]
+
+    try:
+        print(f"fetching meta for {target_fil}")
+        fil_meta = bl.Waterfall(target_fil,load_data=False)
+    except Exception as e:
+        print(f"FAILED : fil_meta = bl.Waterfall(target_fil, load_data=False) for {target_fil}")
+        print(e)
+        logging.info(f"Failed to load fil meta with bl.Waterfall for {target_fil} - skipping this row...")
+    
+    # determine the frequency boundaries in the .fil file
+    minimum_frequency = fil_meta.container.f_start
+    maximum_frequency = fil_meta.container.f_stop
+    # calculate the narrow signal window using the reported drift rate and metadata
+    tsamp = fil_meta.header['tsamp']    # time bin length in seconds
+    obs_length=fil_meta.n_ints_in_file * tsamp # total length of observation in seconds
+
+    """
+    Also would it be faster to read in the waterfall for the entire range ONCE and then access that by frequency ranges
+    so not READING in waterfall with EACH range ?
+    """
+
+    for r,row in df.iterrows(): # each hi
         # print(r)
         # print(row) # TODO a single row is a formatted single string of multiple columns? :/
         if resume_index is not None and r < resume_index:
             continue  # skip rows before the resume index
-        # identify the target beam .fil file 
-        # print("1) is it this taking a while?")
-        matching_col = row.filter(like='fil_').apply(lambda x: x == row['dat_name']).idxmax()
-        # print("done")
-        target_fil = row[matching_col]
+        # identify the target beam .fil file
+        # target_fil = row[matching_col]
         # get the filterbank metadata
         # print("2) is it this taking a while?")
         """ATTENTION - I think this is taking the most time 
@@ -200,22 +232,24 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         esp the hdf reader
         specifically dataset.py ? and being called almost 3 times per call of waterfall?
         """
-        try:
-            fil_meta = bl.Waterfall(target_fil,load_data=False)
-        except Exception as e:
-            print("FAILED : fil_meta = bl.Waterfall(target_fil, load_data=False)")
-            print(e)
-            logging.info(f"Failed to load fil meta with bl.Waterfall for\n{r}\n{row}\n{target_fil}\nskipping this row...")
-            continue
+        # try:
+        #     # print(f"fetching meta for {target_fil}")
+        #     fil_meta = bl.Waterfall(target_fil,load_data=False)
+        # except Exception as e:
+        #     print(f"FAILED : fil_meta = bl.Waterfall(target_fil, load_data=False) for {target_fil}")
+        #     print(e)
+        #     # logging.info(f"Failed to load fil meta with bl.Waterfall for\n{r}\n{row}\n{target_fil}\nskipping this row...")
+        #     continue
         """END - ATTN"""
         # print("done")
         
-        # determine the frequency boundaries in the .fil file
-        minimum_frequency = fil_meta.container.f_start
-        maximum_frequency = fil_meta.container.f_stop
+        
+        # # determine the frequency boundaries in the .fil file
+        # minimum_frequency = fil_meta.container.f_start
+        # maximum_frequency = fil_meta.container.f_stop
         # calculate the narrow signal window using the reported drift rate and metadata
-        tsamp = fil_meta.header['tsamp']    # time bin length in seconds
-        obs_length=fil_meta.n_ints_in_file * tsamp # total length of observation in seconds
+        # tsamp = fil_meta.header['tsamp']    # time bin length in seconds
+        # obs_length=fil_meta.n_ints_in_file * tsamp # total length of observation in seconds
         DR = row['Drift_Rate']              # reported drift rate
         padding=1+np.log10(row['SNR'])/10   # padding based on reported strength of signal
         # calculate the amount of frequency drift with some padding
@@ -232,10 +266,9 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         """
         ATTENTION - this calls wf_data which takes .5s and about 1000 calls but seems like calling waterfall twice?
         """
-        #now set f_start and f_stop of the waterfall and call read_data 
+        # now set f_start and f_stop of the waterfall and call read_data 
         # then grab data for frange,s0
         frange,s0=wf_data(target_fil,f1,f2) # bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
-        
         
         # calculate the SNR
         SNR0 = mySNR(s0)
@@ -280,6 +313,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         if pickle_off==False:
             with open(outdir+f'{obs}_comb_df.pkl', 'wb') as f:
                 pickle.dump((r, df), f) 
+    # print(always_the_same.count(False))
     # remove the pickle checkpoint file after all loops complete
     if os.path.exists(outdir+f"{obs}_comb_df.pkl"):
         os.remove(outdir+f"{obs}_comb_df.pkl") 
