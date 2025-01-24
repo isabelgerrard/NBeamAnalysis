@@ -121,7 +121,7 @@ def dat_to_dataframe(args):
     dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
     start = time.time()
 
-    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Finer/DOTParallel/data_to_dataframe/"+dat+"/"
+    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Finer/DOTParallel2/data_to_dataframe/"+dat+"/"
     dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=RESTART)
 
     """ATTENTION - 0.0, 132m, 136m, 76m, 64m, 84m, 125m, 190m, 75m, 0.0, 3m, 69m, 38m
@@ -268,7 +268,7 @@ def dat_to_dataframe(args):
 
     # Main program execution
 def main(cmd_args):
-    scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Finer/DOTParallel/"
+    scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Finer/DOTParallel2/"
     dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=RESTART)
 
     """OKAY - Threading takes 0.0 seconds"""
@@ -281,7 +281,7 @@ def main(cmd_args):
     # Start a thread to monitor CPU usage during parallel execution
     monitor_thread = threading.Thread(target=monitor_cpu_usage, args=(samples,))
     monitor_thread.start()
-    """END - Threading takes 0.0 seconds""""
+    """END - Threading takes 0.0 seconds"""
 
     """OKAY - Args + File Management takes 0.0 seconds"""
     dp_profiler.add_section("Args + file management stuff")
@@ -507,6 +507,7 @@ def main(cmd_args):
 NIGHT = r"2024-12-13-02:09:48/"
 SCAN = r"fil_60657_39349_70813781_radec5.389,23.168_0001/"
 RESTART = False
+
 if __name__ == "__main__":
     # in this case the arguments are given as command line arguments
     # cmd_args = parse_args()

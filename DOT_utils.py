@@ -199,7 +199,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         ~ .5 seconds and called ~2000 times
         esp the hdf reader
         specifically dataset.py ? and being called almost 3 times per call of waterfall?
-        """"
+        """
         try:
             fil_meta = bl.Waterfall(target_fil,load_data=False)
         except Exception as e:
@@ -209,6 +209,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
             continue
         """END - ATTN"""
         # print("done")
+        
         # determine the frequency boundaries in the .fil file
         minimum_frequency = fil_meta.container.f_start
         maximum_frequency = fil_meta.container.f_stop
@@ -228,8 +229,14 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         f1=round(max(fmid-half_span*1e-6,minimum_frequency),6)
         f2=round(min(fmid+half_span*1e-6,maximum_frequency),6)
         # grab the signal data in the target beam fil file
-        """ATTENTION - this calls wf_data which takes .5s and about 1000 calls but seems like calling waterfall twice? """
-        frange,s0=wf_data(target_fil,f1,f2)
+        """
+        ATTENTION - this calls wf_data which takes .5s and about 1000 calls but seems like calling waterfall twice?
+        """
+        #now set f_start and f_stop of the waterfall and call read_data 
+        # then grab data for frange,s0
+        frange,s0=wf_data(target_fil,f1,f2) # bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
+        
+        
         # calculate the SNR
         SNR0 = mySNR(s0)
         # get a list of all the other fil files for all the other beams
