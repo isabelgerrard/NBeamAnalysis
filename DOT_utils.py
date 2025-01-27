@@ -10,7 +10,7 @@ import os
 import glob
 import argparse
 import sys
-sys.path.append("../blimpy")
+sys.path.append('/mnt/primary/scratch/igerrard/ASP/blimpy')
 import blimpy as bl
 # import blimpy as bl
 # from blimpy.io import hdf_reader

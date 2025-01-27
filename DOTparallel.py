@@ -39,6 +39,7 @@ import psutil
 import threading
 from multiprocessing import Pool, Manager, Lock, Process
 from plot_utils import diagnostic_plotter
+sys.path.append('/mnt/primary/scratch/igerrard/ASP/blimpy')
 
     # Define Functions
 # monitor and print CPU usage during the parallel execution
