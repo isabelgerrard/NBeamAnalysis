@@ -10,7 +10,7 @@ import os
 import glob
 import argparse
 import sys
-sys.path.append("./blimpy/blimpy")
+sys.path.append("../blimpy")
 import blimpy as bl
 # import blimpy as bl
 # from blimpy.io import hdf_reader
