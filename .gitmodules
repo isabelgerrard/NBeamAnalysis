@@ -1,3 +1,4 @@
 [submodule "blimpy"]
-	path = /mnt/primary/scratch/igerrard/ASP/blimpy
-	url = https://github.com/UCBerkeleySETI/blimpy.git
+	path = blimpy
+	url = ./src/blimpy
+	# url = https://github.com/UCBerkeleySETI/blimpy.git
