@@ -10,9 +10,9 @@ import os
 import glob
 import argparse
 import sys
-sys.path.append("./blimpy")
+# export PYTHONPATH=$PYTHONPATH:/path/to/your/module
 import blimpy as bl
-# from blimpy.io import hdf_reader
+print(bl.__file__)
 import logging
 
 # hdf_reader.examine_h5(None)
@@ -123,17 +123,18 @@ def load_dat_df(dat_file,filtuple):
 # use blimpy to grab the data slice from the filterbank file over the frequency range provided
 """ATTENTION - this takes .5 sec about 1300 calls"""
 def wf_data(fil,f1,f2):
+    # print("\t**in wf_data calling bl.waterfall**", flush=True)
     return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
 
-def get_wf(fil):
-    print(f"Loading bl.Waterfall for {fil} - only once for this node")
-    return bl.Waterfall(fil)
+# def get_wf(fil):
+#     print(f"Loading bl.Waterfall for {fil} - only once for this node")
+#     return bl.Waterfall(fil)
 
-def wf_data_range(bl_wf, f1, f2):
-    # print("this is how long takes to grab data just in range when waterfall already saved")
-    frange, s = bl_wf.grab_data(f1, f2)
-    # print("and now thats done\n")
-    return frange, s
+# def wf_data_range(bl_wf, f1, f2):
+#     # print("this is how long takes to grab data just in range when waterfall already saved")
+#     frange, s = bl_wf.grab_data(f1, f2)
+#     # print("and now thats done\n")
+#     return frange, s
 
 # get the normalization factor of a 2D array
 def ACF(s1):
@@ -218,6 +219,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         print(f"FAILED : fil_meta = bl.Waterfall(target_fil, load_data=False) for {target_fil}")
         print(e)
         logging.info(f"Failed to load fil meta with bl.Waterfall for {target_fil} - skipping this row...")
+        return
     
     # determine the frequency boundaries in the .fil file
     minimum_frequency = fil_meta.container.f_start
@@ -250,6 +252,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     num_rows = len(df)
     for r,row in df.iterrows(): # each hit
         if r%200==0: print(f"{r}/{num_rows}") # TODO for debug only 
+        # if r%10==0: break # TODO for debug only 
         # print(row) # TODO a single row is a formatted single string of multiple columns? :/
         if resume_index is not None and r < resume_index:
             continue  # skip rows before the resume index
@@ -267,6 +270,11 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         # to ensure it is contained within the window
         f1=round(max(fmid-half_span*1e-6,minimum_frequency),6)
         f2=round(min(fmid+half_span*1e-6,maximum_frequency),6)
+
+        if fmid-half_span*1e-6 < minimum_frequency:
+            print(f"setting to minimum {minimum_frequency}\n{fmid-half_span*1e-6} --> {f1}")
+        if fmid+half_span*1e-6 > maximum_frequency:
+            print(f"setting to maximum {maximum_frequency}\n{fmid+half_span*1e-6} --> {f2}")
         # grab the signal data in the target beam fil file
         """
         ATTENTION - this calls wf_data which takes .5s and about 1000 calls but seems like calling waterfall twice?
