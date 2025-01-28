@@ -126,6 +126,15 @@ def wf_data(fil,f1,f2):
     # print("\t**in wf_data calling bl.waterfall**", flush=True)
     return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
 
+def wf_blob_data(fil,f1,f2):
+    idx_start, idx_stop = self.get_frequency_indices(f1, f2)
+
+    # Define blob dimensions (time, beams, freq range)
+    blob_dim = (self.reader.n_ints_in_file, 1, idx_stop - idx_start)
+
+    # Use `read_blob` to extract the data
+    blob = self.reader.read_blob(blob_dim, n_blob=0)
+
 # def get_wf(fil):
 #     print(f"Loading bl.Waterfall for {fil} - only once for this node")
 #     return bl.Waterfall(fil)
@@ -162,10 +171,11 @@ def mid_90(da,p=5):
 
 # My method for calculating SNR
 def mySNR(power):
-    # get the median of the noise
-    median_noise=noise_median(power)
     # assume the middle 90 percent of the array represent the noise
-    noise_els=mid_90(power)             
+    noise_els=mid_90(power)  
+    # get the median of the noise
+    # median_noise=noise_median(power) # call mid_90 only 1x
+    median_noise=np.median(mid_90)
     # zero out the noise by subtracting off the median
     zeroed_noise=noise_els-median_noise     
     # get the standard deviation of the noise using median instead of mean
