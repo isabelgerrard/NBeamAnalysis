@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.ticker import ScalarFormatter
 # import DOT_utils as DOT
-import DOT_utils_copy as DOT
+import DOT_utils_edit as DOT
 import logging
 import psutil
 import threading

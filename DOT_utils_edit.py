@@ -228,7 +228,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     except Exception as e:
         print(f"FAILED : fil_meta = bl.Waterfall(target_fil, load_data=False) for {target_fil}")
         print(e)
-        logging.info(f"Failed to load fil meta with bl.Waterfall for {target_fil} - skipping this row...")
+        logging.info(f"Failed to load fil meta with bl.Waterfall for {target_fil} - skipping this node...")
         return
     
     # determine the frequency boundaries in the .fil file
