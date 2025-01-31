@@ -1,0 +1,4 @@
+[submodule "blimpy"]
+	path = blimpy
+	url = ./src/blimpy
+	# url = https://github.com/UCBerkeleySETI/blimpy.git
