@@ -1,4 +1,4 @@
-w'''
+'''
 This is the serial version of the code. It does the same thing as DOTparallel.py, 
 but processes one dat file at a time and utilizes pickle states for resuming an interrupted process.
 

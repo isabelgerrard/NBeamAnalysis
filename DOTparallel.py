@@ -21,7 +21,7 @@ Typical basic command line usage looks something like:
 NOTE: the subdirectory tree structure for the <dat_dir> and <fil_dir> must be identical
 '''
 
-    # Import Packages
+# Import Packages
 import pandas as pd
 import numpy as np
 import time
@@ -32,12 +32,14 @@ import argparse
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.ticker import ScalarFormatter
-import DOT_utils as DOT
+# import DOT_utils as DOT
+import DOT_utils_edit as DOT
 import logging
 import psutil
 import threading
 from multiprocessing import Pool, Manager, Lock, Process
 from plot_utils import diagnostic_plotter
+# sys.path.append('/mnt/primary/scratch/igerrard/ASP/blimpy')
 
     # Define Functions
 # monitor and print CPU usage during the parallel execution
@@ -72,27 +74,45 @@ def parse_args():
     parser.set_defaults(bliss=False)
     args = parser.parse_args()
 
+    args = check_cmd_args(args)
+    
+    return args
+
+def check_cmd_args(args):
     # Check for trailing slash in the directory path and add it if absent
-    odict = vars(args)
-    if odict["datdir"]:
-        datdir = odict["datdir"][0]
-        if datdir[-1] != "/":
-            datdir += "/"
-        odict["datdir"] = datdir  
+    odict = args if type(args) == dict else vars(args)
+    assert "datdir" in odict, print("No required data directory!")
+    # odict["datdir"] += "/"
+    datdir = odict["datdir"]
+    if datdir[-1] != "/":
+        datdir += "/"
+    odict["datdir"] = datdir  
     if odict["fildir"]:
-        fildir = odict["fildir"][0]
+        # fildir = odict["fildir"][0]
+        fildir = odict["fildir"]
         if fildir[-1] != "/":
             fildir += "/"
         odict["fildir"] = fildir  
     else:
         odict["fildir"] = datdir
     if odict["outdir"]:
-        outdir = odict["outdir"][0]
+        # outdir = odict["outdir"][0]
+        outdir = odict["outdir"]
         if outdir[-1] != "/":
             outdir += "/"
         odict["outdir"] = outdir  
     else:
         odict["outdir"] = ""
+
+    # Set defaults when not using parser bc not using cmd line args
+    if "beam" not in odict:
+        odict["beam"] = "0"
+    if "ncore" not in odict:
+        odict["ncore"] = None
+    if "after" not in odict:
+        odict["after"] = None
+    if "bliss" not in odict:
+        odict["bliss"] = False
     # Returns the input argument as a labeled array
     return odict
 
@@ -102,75 +122,163 @@ def parse_args():
 def dat_to_dataframe(args):
     dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
     start = time.time()
+
+    # PROF_DST - avoid using global vairables 
+    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Test/1core_1meta_poolmap_h5attrs/"+"/data_to_dataframe/"+dat+"/"
+    dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=False)
+
+    """ATTENTION - 0.0, 132m, 136m, 76m, 64m, 84m, 125m, 190m, 75m, 0.0, 3m, 69m, 38m
+    BUT maybe not and is profiler issue ???
+    maybe only taking a while because dont close profiler if not fils cases 
+    """
+    dataframe_profiler.add_section("with count_lock")
     with count_lock:
+        count_lock_profiler = profile_manager.start_profiler("proc", "2_with_count_lock", dd_time_dst, restart=False)
         dat_name = "/".join(dat.split("/")[-2:])
         # get the common subdirectories with trailing "/"
+        count_lock_profiler.add_section("get the common subdirectories with trailing ")
         subdirectories="/".join(dat.replace(datdir,"").split("/")[:-1])+"/"
         fil_MJD="_".join(dat.split('/')[-1].split("_")[:3])
         proc_count.value += 1
         # optionally skip if outside input MJD bounds
+        count_lock_profiler.add_section("Optionally skip if outside input MJD bounds")
         if before and float(".".join(fil_MJD[4:].split("_"))[:len(before[0])]) >= float(".".join(before[0].split("_"))):
             logging.info(f'Skipping dat file {proc_count.value}/{ndats} occurring after input MJD ({before[0]}):\n\t{dat_name}')
+            count_lock_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(count_lock_profiler)
+            dataframe_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),0,1,0
         if after and float(".".join(fil_MJD[4:].split("_"))[:len(after[0])]) <= float(".".join(after[0].split("_"))):
             logging.info(f'Skipping dat file {proc_count.value}/{ndats} occurring before input MJD ({after[0]}):\n\t{dat_name}')
+            count_lock_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(count_lock_profiler)
+            dataframe_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),0,1,0
         logging.info(f'\nProcessing dat file {proc_count.value}/{ndats}\n\t{dat_name}')
         hits,skipped,exact_matches=0,0,0
         # make a tuple with the corresponding fil/h5 files
         # fils=sorted(glob.glob(fildir+subdirectories+fil_MJD+'*fil'))
+        count_lock_profiler.add_section("Sorting subdirectories")
         fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*fil'))
         if not fils:
+            print("No fil files. Looking for fbh5/h5 instead.")
+            # TODO this step is taking a while - probs because using sorting
+            # also pretty sure the sorting is doing something weird anyway
+            count_lock_profiler.add_section("If not fils - Sorting subdirectories again ?")
             fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*h5'))
         if not fils:
+            count_lock_profiler.add_section("Skipping because could not locate filterbank files ?")
             logging.info(f'\tWARNING! Could not locate filterbank files in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
             logging.info(f'\tSkipping...\n')
             skipped+=1
             mid, time_label = DOT.get_elapsed_time(start)
             logging.info(f"Finished processing in %.2f {time_label}." %mid)
+            count_lock_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(count_lock_profiler)
+            dataframe_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),hits,skipped,exact_matches
         elif len(fils)==1:
             logging.info(f'\tWARNING! Could only locate 1 filterbank file in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
             logging.info(f'\tProceeding with caution...')
+        count_lock_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(count_lock_profiler)
+        """END - ATTENTION"""
+
         # make a dataframe containing all the hits from all the dat files in the tuple and sort them by frequency
+        """OKAY - load_dat_sf takes 0.0 seconds"""
+        dataframe_profiler.add_section("DOT.load_dat_df")
+        load_dat_profiler = profile_manager.start_profiler("proc", "3_load_dat_df", dd_time_dst, restart=False)
+        load_dat_profiler.add_section("DOT.load_dat_df")
         df0 = DOT.load_dat_df(dat,fils)
+        load_dat_profiler.add_section("Sort by Corrected_frequency")
         df0 = df0.sort_values('Corrected_Frequency').reset_index(drop=True)
         if df0.empty:
+            load_dat_profiler.add_section("df0.empty True")
             logging.info(f'\tWARNING! No hits found in this dat file.')
             logging.info(f'\tSkipping...')
             skipped+=1
             mid, time_label = DOT.get_elapsed_time(start)
             logging.info(f"Finished processing in %.2f {time_label}." %mid)
+            load_dat_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(load_dat_profiler)
+            dataframe_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),hits,skipped,exact_matches
+        load_dat_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(load_dat_profiler)
+        """END - load_dat_sf takes 0.0 seconds"""
+
+        """ATTENTION - Takes 1.5 min per NODE, 5s, 3s, 7s, 8s, 7s, 0, 0, 0, 1, 0, 0, 14, 1, 0, 0"""
+        sf_profiler = profile_manager.start_profiler("proc", "4_sf", dd_time_dst, restart=False)
+        dataframe_profiler.add_section("Apply spatial filtering if turned on with sf flag")
         # apply spatial filtering if turned on with sf flag (default is off)
         if sf!=None:  
+            sf_profiler.add_section("DOT.cross_ref")
             df = DOT.cross_ref(df0,sf)
             exact_matches+=len(df0)-len(df)
             hits+=len(df0)
             mid, time_label = DOT.get_elapsed_time(start)
+            # TODO this should be amount of time for this file not since beginning 
+            # actually this means all starting at same time but still doing these one at a time = is it actually using all the cores ?
             logging.info(f"\t{len(df0)-len(df)}/{len(df0)} hits removed as exact frequency matches in %.2f {time_label}." %mid)
             start = time.time()
         else:
+            sf_profiler.add_section("sf == None")
             df = df0
             hits+=len(df0)
+        sf_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(sf_profiler)
+        """END - Takes 1.5 min per NODE"""
+
+        """ATTENTION - takes 2 min, 4.5 min, 70 min, 48s, 1min40, 3m16, 4m30, 1m60, 1m40, 38m, 34m, 15m, 36
+        12221.138 12221.138 12221.138 12221.138 {method 'enable' of '_lsprof.Profiler' objects}
+        """
+        comb_profiler = profile_manager.start_profiler("proc", "5_comb_and_correlate", dd_time_dst, restart=False)
+        dataframe_profiler.add_section("Comb through the dataframe, correlate beam power for each hit and calculate attenuation with SNR-ratio")
         # comb through the dataframe, correlate beam power for each hit and calculate attenuation with SNR-ratio
         if df.empty:
+            comb_profiler.add_section("Empty dataframe")
             logging.info(f'\tWARNING! Empty dataframe constructed after spatial filtering of dat file.')
             logging.info(f'\tSkipping this dat file because there are no remaining hits to comb through...')
             skipped+=1
             mid, time_label = DOT.get_elapsed_time(start)
             logging.info(f"Finished processing in %.2f {time_label}." %mid)
+            comb_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(comb_profiler)
+            dataframe_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),hits,skipped,exact_matches
         else:
+            """ATTENTION - NO THIS IS THE PART TAKING TIME 
+            """
+            comb_df_profiler = profile_manager.start_profiler("proc", "6_DOT.comb_df", dd_time_dst, restart=False)
+            comb_profiler.add_section(f"\tCombing through the remaining {len(df)} hits.")
             logging.info(f"\tCombing through the remaining {len(df)} hits.")
+            # print(np.shape(df))
             temp_df = DOT.comb_df(df,outdir,obs,pickle_off=True,sf=sf)
+            comb_df_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(comb_df_profiler)
+            """END - ATTENTION"""
         mid, time_label = DOT.get_elapsed_time(start)
+        # TODO but this time is differen than above ... 
         logging.info(f"Finished processing in %.2f {time_label}." %mid)
+        comb_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(comb_profiler)
+        dataframe_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(dataframe_profiler)
         return temp_df,hits,skipped,exact_matches
 
 
     # Main program execution
-def main():
+def main(cmd_args):
+    scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Test/1core_1meta_poolmap_h5attrs/" # PROF_DST
+    dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
+
+    """OKAY - Threading takes 0.0 seconds"""
+    dp_profiler.add_section("Threading to monitor CPU usafe during parallel execution")
     start=time.time()
 
     global exit_flag
@@ -179,9 +287,12 @@ def main():
     # Start a thread to monitor CPU usage during parallel execution
     monitor_thread = threading.Thread(target=monitor_cpu_usage, args=(samples,))
     monitor_thread.start()
+    """END - Threading takes 0.0 seconds"""
 
+    """OKAY - Args + File Management takes 0.0 seconds"""
+    dp_profiler.add_section("Args + file management stuff")
     # parse the command line arguments
-    cmd_args = parse_args()
+    # cmd_args = parse_args()
     datdir = cmd_args["datdir"]     # required input
     fildir = cmd_args["fildir"]     # optional (but usually necessary)
     beam = cmd_args["beam"][0]      # optional, default = 0
@@ -206,7 +317,10 @@ def main():
             obs="obs_UNKNOWN"
     else:
         obs = tag[0]
+    """END - Args + File Management takes 0.0 seconds"""
 
+    """OKAY - Configure logging takes 0.0 seconds"""
+    dp_profiler.add_section("Configure Logging")
     # configure the output log file
     logfile=outdir+f'{obs}_out.txt'
     completion_code="Program complete!"
@@ -216,13 +330,27 @@ def main():
             if completion_code in line:
                 os.remove(logfile)
                 break
+    
+    
+    # file_handler = logging.FileHandler(log_filename) giving permission denied 
+    # logfile = f"{os.getcwd()}/{logfile}"
+    logfile = logfile
     DOT.setup_logging(logfile)
     logger = logging.getLogger()
     logging.info("\nExecuting program...")
     logging.info(f"Initial CPU usage for each of the {os.cpu_count()} cores:\n{psutil.cpu_percent(percpu=True)}")
+    """END - Configure logging takes 0.0 seconds"""
 
     # find and get a list of tuples of all the dat files corresponding to each subset of the observation
+    """
+    Dot.get_dats takes <1 second (~.7s)
+    Because of os.walk
+    """
+    dats_profiler = profile_manager.start_profiler("proc", "1_DOT.get_dats", scan_time_dst, restart=False)
+    dp_profiler.add_section("DOT.get_dats : find and get a list of tuples of all the dat files corresponding to each subset of the observation")
+    dats_profiler.add_section("DOT.get_dats")
     dat_files,errors = DOT.get_dats(datdir,beam,bliss)
+
     # make sure dat_files is not empty
     if not dat_files:
         logging.info(f'\n\tERROR: No .dat files found in subfolders.'+
@@ -233,44 +361,91 @@ def main():
 
     if sf==None:
         logging.info("\nNo spatial filtering being applied since sf flag was not toggled on input command.\n")
-    
+    dats_profiler.end_and_save_profiler()
+    profile_manager.active_profilers.remove(dats_profiler)
+    """END - Dot.get_dats takes <1 second (~.7s)"""
+
+    """ATTENTION - Parallelization is taking all the time - about 3.5 hours"""
+    dp_profiler.add_section("Start Parallelization")
+    parallel_profiler = profile_manager.start_profiler("proc", "2_parallelization", scan_time_dst, restart=False)
     ndats=len(dat_files)
 
+    """OKAY - takes 0.0 seconds"""
+    parallel_profiler.add_section("Get num_processes")
     # Here's where things start to get fancy with parellelization
-    if ncore==None:
+    if ncore==None: # TODO run with 1 core 
         num_processes = os.cpu_count()
     else:
         num_processes = ncore
     logging.info(f"\n{num_processes} cores requested by user for parallel processing.")
+    """OKAY - takes 0.0 seconds"""
+
+    parallel_profiler.add_section("Initialize manager for shared variables")
     # Initialize the Manager object for shared variables
     manager = Manager()
     count_lock = manager.Lock()
     proc_count = manager.Value('i', 0)  # Shared integer to track processed count
     # Execute the parallelized function
-    input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files]
-    with Pool(num_processes) as pool:
-        results = pool.map(dat_to_dataframe, input_args)
 
+    """ATTENTION - takes 3+ HOURS"""
+    parallel_profiler.add_section("Execute parallelized function")
+    # todo 
+    input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files]
+    # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files[:2]] # TODO debug
+    """
+    Pool.imap_unordered: Tasks are dynamically allocated to workers as they become available. Once a worker finishes a task, it grabs the next available task from the queue. This ensures all workers stay busy, minimizing idle time, even with uneven runtimes.
+    basically - Dynamic Allocation: Workers don’t get "stuck" with long tasks; they keep pulling tasks as they finish, ensuring efficient use of all CPUs.
+    """
+    # TODO look into blocing 
+    with Pool(num_processes) as pool:
+        # TODO table mess with parallel 
+        # start with 1 core 
+        # check blocking, chunk size 
+        results = pool.map(dat_to_dataframe, input_args) # starts -> each process gets a node -> when done with node that process is idle
+        # results = list(pool.imap_unordered(dat_to_dataframe, input_args)) # TODO chunk
+        # auto closes
+
+    parallel_profiler.end_and_save_profiler()
+    profile_manager.active_profilers.remove(parallel_profiler)
+    """END - Parallelization is taking all the time - about 3.5 hours"""
+
+    # TODO
+    """BREAKS HERE"""
+    dp_profiler.add_section("Processing results")
+    results_profiler = profile_manager.start_profiler("proc", "3_results", scan_time_dst, restart=False)
     # Process the results as needed
+    results_profiler.add_section("Process results as needed")
     result_dataframes, hits, skipped, exact_matches = zip(*results)
 
     # Concatenate the dataframes into a single dataframe
+    results_profiler.add_section("Concatenate the dataframes into a single dataframe")
     full_df = pd.concat(result_dataframes, ignore_index=True)
-    full_df.to_csv(f"{outdir}{obs}_DOTnbeam.csv")
+    test_dst = os.path.join(os.getcwd(), f"{outdir}{obs}_DOTnbeam.csv")
+    full_df.to_csv(test_dst)
+    print(np.shape(full_df))
 
     # Do something with the counters if needed
+    results_profiler.add_section("Do something with counters if needed")
     total_hits = sum(hits)
     total_skipped = sum(skipped)
     total_exact_matches = sum(exact_matches)
 
+    results_profiler.end_and_save_profiler()
+    profile_manager.active_profilers.remove(results_profiler)
+
     if sf==None:
-        sf=4
+        sf=4 
+
+    dp_profiler.add_section("Handling SNR_ratio")
 
     if 'SNR_ratio' in full_df.columns and full_df['SNR_ratio'].notnull().any():
+        snr_profiler = profile_manager.start_profiler("proc", "4_snr_ratio", scan_time_dst, restart=False)
+        snr_profiler.add_section("Plot histograms for hits within the target beam")
         # plot the histograms for hits within the target beam
         diagnostic_plotter(full_df, obs, saving=True, outdir=outdir)
 
         # plot the SNR ratios vs the correlation scores for each hit in the target beam
+        snr_profiler.add_section("Plot theSNR ratios vs the correlation scores for each hit in the target beam")
         x = full_df.corrs
         SNRr = full_df.SNR_ratio
         fig,ax=plt.subplots(figsize=(12,10))
@@ -299,9 +474,13 @@ def main():
         for i,score in enumerate(x):
             if np.interp(score,xcutoff,ycutoff)<SNRr[i]:
                 above_cutoff+=1
+
+        snr_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(snr_profiler)
     logging.info(f"\n**Final results:")
     
     # Final print block
+    dp_profiler.add_section("File print block")
     if total_skipped>0:
         logging.info(f'\n\t{total_skipped}/{ndats} dat files skipped. Check the log for skipped filenames.\n')
     end, time_label = DOT.get_elapsed_time(start)
@@ -322,12 +501,15 @@ def main():
         logging.info(f"\nThe full dataframe was saved to: {outdir}{obs}_DOTnbeam.csv")
 
     # Signal the monitoring thread to exit
+    dp_profiler.add_section("Signal the monitoring thread to exit")
     exit_flag.set()
 
     # Allow some time for the monitoring thread to finish
+    dp_profiler.add_section("Allow some time for the monitoring thread to finish")
     monitor_thread.join(timeout=5)  # Adjust the timeout if needed
 
     # Calculate and print the average CPU usage over time
+    dp_profiler.add_section("Calculate and print the average CPU usage over time")
     if samples:
         num_samples = len(samples)
         num_cores = len(samples[0])
@@ -338,6 +520,47 @@ def main():
 
     logging.info(f"\n\tProgram complete!\n")
     return None
-# run it!
+
+#%% run it!
+NIGHT = r"2024-12-13-02:09:48/"
+SCAN = r"fil_60657_39349_70813781_radec5.389,23.168_0001/"
+RESTART = False
+# PROF_DST = "Test/full_waterfall_and_vec/"
+PROF_DST = "Test/1core_1meta_poolmap/"
+
 if __name__ == "__main__":
-    main()
+    # in this case the arguments are given as command line arguments
+    # cmd_args = parse_args()
+    # main(cmd_args)
+
+    sys.path.append("../")
+    from time_profiler import ProfileManager, TimeProfiler
+
+    night, scan = NIGHT, SCAN
+    datdir = f"/mnt/primary/scratch/igerrard/ASP/bliss_outputs/{night}/{scan}/" # required input
+    # datdir = f"{os.getcwd()}/bliss_outputs/{night}/{scan}/LoB.C1120/" # required input # TODO 
+    outdir = f"/mnt/primary/scratch/igerrard/ASP/Nbeam_output_FULLSCAN/" # -o # optional (defaults to current directory) 
+    tag = "ASP_test_FULLSCAN" # optional file label, default = None 
+    # fildir = "." # -f # optional (but usually necessary)
+    fildir = f"/mnt/primary/scratch/igerrard/ASP/" # -f # optional (but usually necessary)
+    before = 0 # -b # optional, MJD to limit observations
+    sf = 5.29 # optional, flag to turn off spatial filtering
+    bliss = True
+    # TODO test
+    ncore = 1 # number of cpu cores to use in parallel
+    # equivalent to cmd_args = parse_args() in Dotparallel
+    cmd_args = {"datdir":datdir, "outdir":outdir, "fildir":fildir, "tag":tag, "before":before, "ncore":ncore, "sf":sf, "bliss":bliss}
+    # and set defaults 
+    cmd_args = check_cmd_args(cmd_args)
+
+    profile_manager = ProfileManager()
+
+    try:
+        main(cmd_args)
+    except KeyboardInterrupt:
+        print("\n\tExiting with Ctrl+C\n\tCleaning up...")
+    finally:
+        # Clean up active profilers
+        profile_manager.stop_and_save_all()
+
+    
