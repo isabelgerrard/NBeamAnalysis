@@ -33,13 +33,13 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.ticker import ScalarFormatter
 # import DOT_utils as DOT
-import DOT_utils_edit as DOT
+# import DOT_utils_edit as DOT
+import DOT_utils_wfhitlooponly as DOT
 import logging
 import psutil
 import threading
 from multiprocessing import Pool, Manager, Lock, Process
 from plot_utils import diagnostic_plotter
-# sys.path.append('/mnt/primary/scratch/igerrard/ASP/blimpy')
 
     # Define Functions
 # monitor and print CPU usage during the parallel execution

@@ -10,9 +10,7 @@ import os
 import glob
 import argparse
 import sys
-# export PYTHONPATH=$PYTHONPATH:/path/to/your/module
 import blimpy as bl
-# print(bl.__file__)
 import logging
 
 # hdf_reader.examine_h5(None)
@@ -69,9 +67,6 @@ def check_logs(log, bliss=False):
             status="incomplete"
     return status
 
-def get_beam_code(fil_string):
-    return fil_string.split('beam')[-1].split('.')[0]
-
 # retrieve a list of .dat files, each with the full path of each .dat file for the target beam
 def get_dats(root_dir,beam,bliss):
     """Recursively finds all files with the '.dat' extension in a directory
@@ -123,17 +118,13 @@ def load_dat_df(dat_file,filtuple):
 # use blimpy to grab the data slice from the filterbank file over the frequency range provided
 """ATTENTION - this takes .5 sec about 1300 calls"""
 def wf_data(fil,f1,f2):
-    # print("\t**in wf_data calling bl.waterfall**", flush=True)
     return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
 
-def wf_blob_data(fil,f1,f2):
-    idx_start, idx_stop = self.get_frequency_indices(f1, f2)
+def get_wf(fil):
+    return bl.Waterfall(fil)
 
-    # Define blob dimensions (time, beams, freq range)
-    blob_dim = (self.reader.n_ints_in_file, 1, idx_stop - idx_start)
-
-    # Use `read_blob` to extract the data
-    blob = self.reader.read_blob(blob_dim, n_blob=0)
+def wf_data_range(bl_wf, f1, f2):
+    return bl_wf.grab_data(f1, f2)
 
 # get the normalization factor of a 2D array
 def ACF(s1):
@@ -161,11 +152,10 @@ def mid_90(da,p=5):
 
 # My method for calculating SNR
 def mySNR(power):
-    # assume the middle 90 percent of the array represent the noise
-    noise_els=mid_90(power)  
     # get the median of the noise
-    # median_noise=noise_median(power) # call mid_90 only 1x
-    median_noise=np.median(mid_90)
+    median_noise=noise_median(power)
+    # assume the middle 90 percent of the array represent the noise
+    noise_els=mid_90(power)             
     # zero out the noise by subtracting off the median
     zeroed_noise=noise_els-median_noise     
     # get the standard deviation of the noise using median instead of mean
@@ -194,18 +184,11 @@ def resume(pickle_file, df):
         logging.info(f'\t***pickle checkpoint file found. Resuming from step {index+1}\n')
     return index, df
 
-# def get_corr(s0, s1):
-#     return sig_cor(s0-noise_median(s0),s1-noise_median(s1))
-
 # comb through each hit in the dataframe and look for corresponding hits in each of the beams.
 def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4):
     if sf==None:
         sf=4
-    """
-    Same target_fil for every row in a given data frame = always same metadata
-    Don't recalc metadata constants for each hit
-    """
-    # identify the target beam .fil file
+
     first_row = df.iloc[0]
     matching_col = first_row.filter(like='fil_').apply(lambda x: x == first_row['dat_name']).idxmax()
     target_fil = first_row[matching_col]
@@ -226,28 +209,23 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     tsamp = fil_meta.header['tsamp']    # time bin length in seconds
     obs_length=fil_meta.n_ints_in_file * tsamp # total length of observation in seconds
 
-    # """
-    # Also would it be faster to read in the waterfall for the entire range ONCE and then access that by frequency ranges
-    # so not READING in waterfall with EACH range ?
-    # """
-    # target_wf = get_wf(target_fil)
+    # vectorizing stuff
+    # # # get a list of all the other fil files for all the other beams
+    # other_cols = first_row.loc[first_row.index.str.startswith('fil_') & (first_row.index != matching_col)]
+    # # # iteritems is deprecated, also don't use colname 
+    # # # for col_name, other_fil in other_cols.iteritems():
+    # other_fils = other_cols.values # this is index object - can use tolist()
+    # # other_wfs_full = [get_wf(other_fil) for other_fil in other_fils]
 
-    # # get a list of all the other fil files for all the other beams
-    other_cols = first_row.loc[first_row.index.str.startswith('fil_') & (first_row.index != matching_col)]
-    # # iteritems is deprecated, also don't use colname 
-    # # for col_name, other_fil in other_cols.iteritems():
-    other_fils = other_cols.values # this is index object - can use tolist()
-    # other_wfs_full = [get_wf(other_fil) for other_fil in other_fils]
-
-    # print(other_fils)
-    beam_codes = [get_beam_code(fil) for fil in other_fils]
-    col_name_corrs=[f'corrs_{beam}' for beam in beam_codes] # TODO this is always 0001 ?
-    col_name_SNRr=[f'SNR_ratio_{beam}' for beam in beam_codes]
+    # # print(other_fils)
+    # beam_codes = [get_beam_code(fil) for fil in other_fils]
+    # col_name_corrs=[f'corrs_{beam}' for beam in beam_codes] # TODO this is always 0001 ?
+    # col_name_SNRr=[f'SNR_ratio_{beam}' for beam in beam_codes]
 
     # this is pointer to those waterfall objects 
 
     print("and now looping through hits")
-    num_rows = len(df)
+
     for r,row in df.iterrows(): # each hit
         if r%200==0: print(f"{r}/{num_rows}") # TODO for debug only 
         # print(row) # TODO a single row is a formatted single string of multiple columns? :/
@@ -284,20 +262,17 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         # calculate the SNR
         SNR0 = mySNR(s0)
         # get a list of all the other fil files for all the other beams
-        # other_cols = row.loc[row.index.str.startswith('fil_') & (row.index != matching_col)]
+        other_cols = row.loc[row.index.str.startswith('fil_') & (row.index != matching_col)]
         # initialize empty lists for appending
         # xs=[] # no longer used
         corrs=[]
         mySNRs=[SNR0]
         SNR_ratios=[]
-        # for col_name, other_fil in other_cols.iteritems():
-        # for col_name, other_fil in other_cols.items(): #iteritems deprecated
-        for other_fil in other_fils: #iteritems deprecated
-        # for other_wf in other_wfs_full: #iteritems deprecated
+
+        # NO VECTORIZING
+        for col_name, other_fil in other_cols.iteritems():
             # grab the signal data from the non-target fil in the same location
             _,s1=wf_data(other_fil,f1,f2)
-            # just grabbing data in that range without completely reloading wf again
-            # _,s1=wf_data_range(other_wf,f1,f2)
             # calculate and append the SNR for the same location in the other beam
             off_SNR = mySNR(s1)
             mySNRs.append(off_SNR)
@@ -310,16 +285,11 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
 
         # add the correlation scores, SNRs and SNR-ratios to the dataframe
         # TODO not doing anything with SNR ratio value her e- can be vectorized
-        """Vectorize""" 
-        # corrs and SNR_ratios have same dimensions
-        df.loc[r,col_name_corrs] = corrs
-        df.loc[r,col_name_SNRr] = SNR_ratios
-        # for i,x in enumerate(SNR_ratios): # TODO SNR_RATIOS is always shape 1?
-            # print("\n Entering SNR_ratios loop")
-            # col_name_corrs='corrs_'+other_cols[i].split('beam')[-1].split('.')[0] # TODO this is always 0001 ?
-            # df.loc[r,col_name_corrs] = corrs[i]
-            # col_name_SNRr='SNR_ratio_'+other_cols[i].split('beam')[-1].split('.')[0]
-            # df.loc[r,col_name_SNRr] = SNR_ratios[i]
+        for i,x in enumerate(SNR_ratios): # TODO SNR_RATIOS is always shape 1?
+            col_name_corrs='corrs_'+other_cols[i].split('beam')[-1].split('.')[0] # TODO this is always 0001 ?
+            df.loc[r,col_name_corrs] = corrs[i]
+            col_name_SNRr='SNR_ratio_'+other_cols[i].split('beam')[-1].split('.')[0]
+            df.loc[r,col_name_SNRr] = SNR_ratios[i]
             # col_name_x = 'x_'+other_cols[i].split('beam')[-1].split('.')[0]
             # df.loc[r,col_name_x] = x
         df.loc[r,'mySNRs'] = str(mySNRs)
@@ -332,6 +302,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         if pickle_off==False:
             with open(outdir+f'{obs}_comb_df.pkl', 'wb') as f:
                 pickle.dump((r, df), f) 
+    # print(always_the_same.count(False))
     # remove the pickle checkpoint file after all loops complete
     if os.path.exists(outdir+f"{obs}_comb_df.pkl"):
         os.remove(outdir+f"{obs}_comb_df.pkl") 

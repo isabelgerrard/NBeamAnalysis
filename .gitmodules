@@ -1,4 +1,4 @@
 [submodule "blimpy"]
-	path = src/blimpy
-	# url = https://github.com/UCBerkeleySETI/blimpy.git
-	url = git@github.com:isabelgerrard/blimpy.git
+	# path = src/blimpy
+	url = https://github.com/UCBerkeleySETI/blimpy.git
+	# url = git@github.com:isabelgerrard/blimpy.git
