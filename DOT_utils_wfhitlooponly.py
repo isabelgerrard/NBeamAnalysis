@@ -10,8 +10,10 @@ import os
 import glob
 import argparse
 import sys
+sys.path.append("./src/blimpy")
 import blimpy as bl
 import logging
+print(bl.__file__)
 
 # hdf_reader.examine_h5(None)
 # logging function
@@ -186,6 +188,7 @@ def resume(pickle_file, df):
 
 # comb through each hit in the dataframe and look for corresponding hits in each of the beams.
 def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4):
+    print("In WF Hit loop Only version")
     if sf==None:
         sf=4
 
@@ -225,6 +228,8 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     # this is pointer to those waterfall objects 
 
     print("and now looping through hits")
+    num_rows = len(df)
+
 
     for r,row in df.iterrows(): # each hit
         if r%200==0: print(f"{r}/{num_rows}") # TODO for debug only 
