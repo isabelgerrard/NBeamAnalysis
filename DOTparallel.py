@@ -126,7 +126,7 @@ def dat_to_dataframe(args):
     start = time.time()
 
     # PROF_DST - avoid using global vairables 
-    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Test/1core_1meta_poolmap_h5attrs/"+"/data_to_dataframe/"+dat+"/"
+    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHitlooponly_1core_allnodes_nocopy/DOTParallel"+"/data_to_dataframe/"+dat+"/"
     dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=False)
 
     """ATTENTION - 0.0, 132m, 136m, 76m, 64m, 84m, 125m, 190m, 75m, 0.0, 3m, 69m, 38m
@@ -276,7 +276,7 @@ def dat_to_dataframe(args):
 
     # Main program execution
 def main(cmd_args):
-    scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+r"2024-12-13-02:09:48/"+"Test/1core_1meta_poolmap_h5attrs/" # PROF_DST
+    scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHitlooponly_1core_allnodes_nocopy/DOTParallel/" # PROF_DST
     dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
 
     """OKAY - Threading takes 0.0 seconds"""
