@@ -36,6 +36,7 @@ from matplotlib.ticker import ScalarFormatter
 # import DOT_utils as DOT
 # import DOT_utils_edit as DOT
 import DOT_utils_wfhitlooponly as DOT
+from time_profiler import ProfileManager, TimeProfiler
 
 import logging
 import psutil
