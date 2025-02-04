@@ -276,251 +276,260 @@ def dat_to_dataframe(args):
 
     # Main program execution
 def main(cmd_args):
-    scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHitlooponly_1core_allnodes_nocopy/DOTParallel/" # PROF_DST
-    dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
+    profile_manager = ProfileManager()
 
-    """OKAY - Threading takes 0.0 seconds"""
-    dp_profiler.add_section("Threading to monitor CPU usafe during parallel execution")
-    start=time.time()
+    try:
+        
+        scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHitlooponly_1core_allnodes_nocopy/DOTParallel/" # PROF_DST
+        dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
 
-    global exit_flag
-    exit_flag = threading.Event()
-    samples=[]  # Store CPU usage samples
-    # Start a thread to monitor CPU usage during parallel execution
-    monitor_thread = threading.Thread(target=monitor_cpu_usage, args=(samples,))
-    monitor_thread.start()
-    """END - Threading takes 0.0 seconds"""
+        """OKAY - Threading takes 0.0 seconds"""
+        dp_profiler.add_section("Threading to monitor CPU usafe during parallel execution")
+        start=time.time()
 
-    """OKAY - Args + File Management takes 0.0 seconds"""
-    dp_profiler.add_section("Args + file management stuff")
-    # parse the command line arguments
-    # cmd_args = parse_args()
-    datdir = cmd_args["datdir"]     # required input
-    fildir = cmd_args["fildir"]     # optional (but usually necessary)
-    beam = cmd_args["beam"][0]      # optional, default = 0
-    beam = str(int(beam)).zfill(4)  # force beam format as four char string with leading zeros. Ex: '0010'
-    outdir = cmd_args["outdir"]     # optional (defaults to current directory)
-    tag = cmd_args["tag"]           # optional file label, default = None
-    ncore = cmd_args["ncore"]       # optional, set number of cores to use, default = all
-    sf = cmd_args["sf"]             # optional, flag to turn off spatial filtering
-    before = cmd_args["before"]     # optional, MJD to limit observations
-    after = cmd_args["after"]       # optional, MJD to limit observations
-    bliss = cmd_args["bliss"]       # optional, set True if using bliss
+        global exit_flag
+        exit_flag = threading.Event()
+        samples=[]  # Store CPU usage samples
+        # Start a thread to monitor CPU usage during parallel execution
+        monitor_thread = threading.Thread(target=monitor_cpu_usage, args=(samples,))
+        monitor_thread.start()
+        """END - Threading takes 0.0 seconds"""
 
-    # create the output directory if the specified path does not exist
-    if not os.path.isdir(outdir):
-        os.mkdir(outdir)
+        """OKAY - Args + File Management takes 0.0 seconds"""
+        dp_profiler.add_section("Args + file management stuff")
+        # parse the command line arguments
+        # cmd_args = parse_args()
+        datdir = cmd_args["datdir"]     # required input
+        fildir = cmd_args["fildir"]     # optional (but usually necessary)
+        beam = cmd_args["beam"][0]      # optional, default = 0
+        beam = str(int(beam)).zfill(4)  # force beam format as four char string with leading zeros. Ex: '0010'
+        outdir = cmd_args["outdir"]     # optional (defaults to current directory)
+        tag = cmd_args["tag"]           # optional file label, default = None
+        ncore = cmd_args["ncore"]       # optional, set number of cores to use, default = all
+        sf = cmd_args["sf"]             # optional, flag to turn off spatial filtering
+        before = cmd_args["before"]     # optional, MJD to limit observations
+        after = cmd_args["after"]       # optional, MJD to limit observations
+        bliss = cmd_args["bliss"]       # optional, set True if using bliss
 
-    # set a unique file identifier if not defined by input
-    if tag == None:
-        try:
-            obs="obs_"+"-".join([i.split('-')[1:3] for i in datdir.split('/') if ':' in i][0])
-        except:
-            obs="obs_UNKNOWN"
-    else:
-        obs = tag[0]
-    """END - Args + File Management takes 0.0 seconds"""
+        # create the output directory if the specified path does not exist
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
 
-    """OKAY - Configure logging takes 0.0 seconds"""
-    dp_profiler.add_section("Configure Logging")
-    # configure the output log file
-    logfile=outdir+f'{obs}_out.txt'
-    completion_code="Program complete!"
-    if os.path.exists(logfile):
-        searchfile=open(logfile,'r').readlines()
-        for line in searchfile:
-            if completion_code in line:
-                os.remove(logfile)
-                break
-    
-    
-    # file_handler = logging.FileHandler(log_filename) giving permission denied 
-    # logfile = f"{os.getcwd()}/{logfile}"
-    logfile = logfile
-    DOT.setup_logging(logfile)
-    logger = logging.getLogger()
-    logging.info("\nExecuting program...")
-    logging.info(f"Initial CPU usage for each of the {os.cpu_count()} cores:\n{psutil.cpu_percent(percpu=True)}")
-    """END - Configure logging takes 0.0 seconds"""
+        # set a unique file identifier if not defined by input
+        if tag == None:
+            try:
+                obs="obs_"+"-".join([i.split('-')[1:3] for i in datdir.split('/') if ':' in i][0])
+            except:
+                obs="obs_UNKNOWN"
+        else:
+            obs = tag[0]
+        """END - Args + File Management takes 0.0 seconds"""
 
-    # find and get a list of tuples of all the dat files corresponding to each subset of the observation
-    """
-    Dot.get_dats takes <1 second (~.7s)
-    Because of os.walk
-    """
-    dats_profiler = profile_manager.start_profiler("proc", "1_DOT.get_dats", scan_time_dst, restart=False)
-    dp_profiler.add_section("DOT.get_dats : find and get a list of tuples of all the dat files corresponding to each subset of the observation")
-    dats_profiler.add_section("DOT.get_dats")
-    dat_files,errors = DOT.get_dats(datdir,beam,bliss)
+        """OKAY - Configure logging takes 0.0 seconds"""
+        dp_profiler.add_section("Configure Logging")
+        # configure the output log file
+        logfile=outdir+f'{obs}_out.txt'
+        completion_code="Program complete!"
+        if os.path.exists(logfile):
+            searchfile=open(logfile,'r').readlines()
+            for line in searchfile:
+                if completion_code in line:
+                    os.remove(logfile)
+                    break
+        
+        
+        # file_handler = logging.FileHandler(log_filename) giving permission denied 
+        # logfile = f"{os.getcwd()}/{logfile}"
+        logfile = logfile
+        DOT.setup_logging(logfile)
+        logger = logging.getLogger()
+        logging.info("\nExecuting program...")
+        logging.info(f"Initial CPU usage for each of the {os.cpu_count()} cores:\n{psutil.cpu_percent(percpu=True)}")
+        """END - Configure logging takes 0.0 seconds"""
 
-    # make sure dat_files is not empty
-    if not dat_files:
-        logging.info(f'\n\tERROR: No .dat files found in subfolders.'+
-                f'Please check the input directory and/or beam number, and then try again:\n{datdir}\n')
-        sys.exit()
-    if errors:
-        logging.info(f'{errors} errors when gathering dat files in the input directory. Check the log for skipped files.')
+        # find and get a list of tuples of all the dat files corresponding to each subset of the observation
+        """
+        Dot.get_dats takes <1 second (~.7s)
+        Because of os.walk
+        """
+        dats_profiler = profile_manager.start_profiler("proc", "1_DOT.get_dats", scan_time_dst, restart=False)
+        dp_profiler.add_section("DOT.get_dats : find and get a list of tuples of all the dat files corresponding to each subset of the observation")
+        dats_profiler.add_section("DOT.get_dats")
+        dat_files,errors = DOT.get_dats(datdir,beam,bliss)
 
-    if sf==None:
-        logging.info("\nNo spatial filtering being applied since sf flag was not toggled on input command.\n")
-    dats_profiler.end_and_save_profiler()
-    profile_manager.active_profilers.remove(dats_profiler)
-    """END - Dot.get_dats takes <1 second (~.7s)"""
+        # make sure dat_files is not empty
+        if not dat_files:
+            logging.info(f'\n\tERROR: No .dat files found in subfolders.'+
+                    f'Please check the input directory and/or beam number, and then try again:\n{datdir}\n')
+            sys.exit()
+        if errors:
+            logging.info(f'{errors} errors when gathering dat files in the input directory. Check the log for skipped files.')
 
-    """ATTENTION - Parallelization is taking all the time - about 3.5 hours"""
-    dp_profiler.add_section("Start Parallelization")
-    parallel_profiler = profile_manager.start_profiler("proc", "2_parallelization", scan_time_dst, restart=False)
-    ndats=len(dat_files)
+        if sf==None:
+            logging.info("\nNo spatial filtering being applied since sf flag was not toggled on input command.\n")
+        dats_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(dats_profiler)
+        """END - Dot.get_dats takes <1 second (~.7s)"""
 
-    """OKAY - takes 0.0 seconds"""
-    parallel_profiler.add_section("Get num_processes")
-    # Here's where things start to get fancy with parellelization
-    if ncore==None: # TODO run with 1 core 
-        num_processes = os.cpu_count()
-    else:
-        num_processes = ncore
-    logging.info(f"\n{num_processes} cores requested by user for parallel processing.")
-    """OKAY - takes 0.0 seconds"""
+        """ATTENTION - Parallelization is taking all the time - about 3.5 hours"""
+        dp_profiler.add_section("Start Parallelization")
+        parallel_profiler = profile_manager.start_profiler("proc", "2_parallelization", scan_time_dst, restart=False)
+        ndats=len(dat_files)
 
-    parallel_profiler.add_section("Initialize manager for shared variables")
-    # Initialize the Manager object for shared variables
-    manager = Manager()
-    count_lock = manager.Lock()
-    proc_count = manager.Value('i', 0)  # Shared integer to track processed count
-    # Execute the parallelized function
+        """OKAY - takes 0.0 seconds"""
+        parallel_profiler.add_section("Get num_processes")
+        # Here's where things start to get fancy with parellelization
+        if ncore==None: # TODO run with 1 core 
+            num_processes = os.cpu_count()
+        else:
+            num_processes = ncore
+        logging.info(f"\n{num_processes} cores requested by user for parallel processing.")
+        """OKAY - takes 0.0 seconds"""
 
-    """ATTENTION - takes 3+ HOURS"""
-    parallel_profiler.add_section("Execute parallelized function")
-    # todo 
-    input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files]
-    # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files[:2]] # TODO debug
-    """
-    Pool.imap_unordered: Tasks are dynamically allocated to workers as they become available. Once a worker finishes a task, it grabs the next available task from the queue. This ensures all workers stay busy, minimizing idle time, even with uneven runtimes.
-    basically - Dynamic Allocation: Workers don’t get "stuck" with long tasks; they keep pulling tasks as they finish, ensuring efficient use of all CPUs.
-    """
-    # TODO look into blocing 
-    with Pool(num_processes) as pool:
-        # TODO table mess with parallel 
-        # start with 1 core 
-        # check blocking, chunk size 
-        results = pool.map(dat_to_dataframe, input_args) # starts -> each process gets a node -> when done with node that process is idle
-        # results = list(pool.imap_unordered(dat_to_dataframe, input_args)) # TODO chunk
-        # auto closes
+        parallel_profiler.add_section("Initialize manager for shared variables")
+        # Initialize the Manager object for shared variables
+        manager = Manager()
+        count_lock = manager.Lock()
+        proc_count = manager.Value('i', 0)  # Shared integer to track processed count
+        # Execute the parallelized function
 
-    parallel_profiler.end_and_save_profiler()
-    profile_manager.active_profilers.remove(parallel_profiler)
-    """END - Parallelization is taking all the time - about 3.5 hours"""
+        """ATTENTION - takes 3+ HOURS"""
+        parallel_profiler.add_section("Execute parallelized function")
+        # todo 
+        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files]
+        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files[:2]] # TODO debug
+        """
+        Pool.imap_unordered: Tasks are dynamically allocated to workers as they become available. Once a worker finishes a task, it grabs the next available task from the queue. This ensures all workers stay busy, minimizing idle time, even with uneven runtimes.
+        basically - Dynamic Allocation: Workers don’t get "stuck" with long tasks; they keep pulling tasks as they finish, ensuring efficient use of all CPUs.
+        """
+        # TODO look into blocing 
+        with Pool(num_processes) as pool:
+            # TODO table mess with parallel 
+            # start with 1 core 
+            # check blocking, chunk size 
+            results = pool.map(dat_to_dataframe, input_args) # starts -> each process gets a node -> when done with node that process is idle
+            # results = list(pool.imap_unordered(dat_to_dataframe, input_args)) # TODO chunk
+            # auto closes
 
-    # TODO
-    """BREAKS HERE"""
-    dp_profiler.add_section("Processing results")
-    results_profiler = profile_manager.start_profiler("proc", "3_results", scan_time_dst, restart=False)
-    # Process the results as needed
-    results_profiler.add_section("Process results as needed")
-    result_dataframes, hits, skipped, exact_matches = zip(*results)
+        parallel_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(parallel_profiler)
+        """END - Parallelization is taking all the time - about 3.5 hours"""
 
-    # Concatenate the dataframes into a single dataframe
-    results_profiler.add_section("Concatenate the dataframes into a single dataframe")
-    full_df = pd.concat(result_dataframes, ignore_index=True)
-    test_dst = os.path.join(os.getcwd(), f"{outdir}{obs}_DOTnbeam.csv")
-    full_df.to_csv(test_dst)
-    print(np.shape(full_df))
+        # TODO
+        """BREAKS HERE"""
+        dp_profiler.add_section("Processing results")
+        results_profiler = profile_manager.start_profiler("proc", "3_results", scan_time_dst, restart=False)
+        # Process the results as needed
+        results_profiler.add_section("Process results as needed")
+        result_dataframes, hits, skipped, exact_matches = zip(*results)
 
-    # Do something with the counters if needed
-    results_profiler.add_section("Do something with counters if needed")
-    total_hits = sum(hits)
-    total_skipped = sum(skipped)
-    total_exact_matches = sum(exact_matches)
+        # Concatenate the dataframes into a single dataframe
+        results_profiler.add_section("Concatenate the dataframes into a single dataframe")
+        full_df = pd.concat(result_dataframes, ignore_index=True)
+        test_dst = os.path.join(os.getcwd(), f"{outdir}{obs}_DOTnbeam.csv")
+        full_df.to_csv(test_dst)
+        print(np.shape(full_df))
 
-    results_profiler.end_and_save_profiler()
-    profile_manager.active_profilers.remove(results_profiler)
+        # Do something with the counters if needed
+        results_profiler.add_section("Do something with counters if needed")
+        total_hits = sum(hits)
+        total_skipped = sum(skipped)
+        total_exact_matches = sum(exact_matches)
 
-    if sf==None:
-        sf=4 
+        results_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(results_profiler)
 
-    dp_profiler.add_section("Handling SNR_ratio")
+        if sf==None:
+            sf=4 
 
-    if 'SNR_ratio' in full_df.columns and full_df['SNR_ratio'].notnull().any():
-        snr_profiler = profile_manager.start_profiler("proc", "4_snr_ratio", scan_time_dst, restart=False)
-        snr_profiler.add_section("Plot histograms for hits within the target beam")
-        # plot the histograms for hits within the target beam
-        diagnostic_plotter(full_df, obs, saving=True, outdir=outdir)
+        dp_profiler.add_section("Handling SNR_ratio")
 
-        # plot the SNR ratios vs the correlation scores for each hit in the target beam
-        snr_profiler.add_section("Plot theSNR ratios vs the correlation scores for each hit in the target beam")
-        x = full_df.corrs
-        SNRr = full_df.SNR_ratio
-        fig,ax=plt.subplots(figsize=(12,10))
-        plt.scatter(x,SNRr,color='orange',alpha=0.5,edgecolor='k')
-        plt.xlabel('Correlation Score')
-        plt.ylabel('SNR-ratio')
-        ylims=plt.gca().get_ylim()
-        xlims=plt.gca().get_xlim()
-        xcutoff=np.linspace(-0.05,1.05,1000)
-        ycutoff=np.array([0.9*sf*max(j-0.05,0)**(1/3) for j in xcutoff])
-        plt.plot(xcutoff,ycutoff,linestyle='--',color='k',alpha=0.5,label='Nominal Cutoff')
-        plt.axhspan(sf,max(ylims[1],10),color='green',alpha=0.25,label='Attenuated Signals')
-        plt.axhspan(1/sf,sf,color='grey',alpha=0.25,label='Similar SNRs')
-        plt.axhspan(1/max(ylims[1],10),1/sf,color='brown',alpha=0.25,label='Off-beam Attenuated')
-        plt.ylim(1/max(ylims[1],10),max(ylims[1],10))
-        plt.yscale('log')
-        ax.yaxis.set_major_formatter(ScalarFormatter())
-        plt.xlim(-0.1,1.1)
-        plt.legend().get_frame().set_alpha(0) 
-        plt.grid(which='major', axis='both', alpha=0.5,linestyle=':')
-        plt.savefig(outdir + f'{obs}_SNRx.png',
-                    bbox_inches='tight',format='png',dpi=fig.dpi,facecolor='white', transparent=False)
-        plt.close()
+        if 'SNR_ratio' in full_df.columns and full_df['SNR_ratio'].notnull().any():
+            snr_profiler = profile_manager.start_profiler("proc", "4_snr_ratio", scan_time_dst, restart=False)
+            snr_profiler.add_section("Plot histograms for hits within the target beam")
+            # plot the histograms for hits within the target beam
+            diagnostic_plotter(full_df, obs, saving=True, outdir=outdir)
 
-        above_cutoff=0
-        for i,score in enumerate(x):
-            if np.interp(score,xcutoff,ycutoff)<SNRr[i]:
-                above_cutoff+=1
+            # plot the SNR ratios vs the correlation scores for each hit in the target beam
+            snr_profiler.add_section("Plot theSNR ratios vs the correlation scores for each hit in the target beam")
+            x = full_df.corrs
+            SNRr = full_df.SNR_ratio
+            fig,ax=plt.subplots(figsize=(12,10))
+            plt.scatter(x,SNRr,color='orange',alpha=0.5,edgecolor='k')
+            plt.xlabel('Correlation Score')
+            plt.ylabel('SNR-ratio')
+            ylims=plt.gca().get_ylim()
+            xlims=plt.gca().get_xlim()
+            xcutoff=np.linspace(-0.05,1.05,1000)
+            ycutoff=np.array([0.9*sf*max(j-0.05,0)**(1/3) for j in xcutoff])
+            plt.plot(xcutoff,ycutoff,linestyle='--',color='k',alpha=0.5,label='Nominal Cutoff')
+            plt.axhspan(sf,max(ylims[1],10),color='green',alpha=0.25,label='Attenuated Signals')
+            plt.axhspan(1/sf,sf,color='grey',alpha=0.25,label='Similar SNRs')
+            plt.axhspan(1/max(ylims[1],10),1/sf,color='brown',alpha=0.25,label='Off-beam Attenuated')
+            plt.ylim(1/max(ylims[1],10),max(ylims[1],10))
+            plt.yscale('log')
+            ax.yaxis.set_major_formatter(ScalarFormatter())
+            plt.xlim(-0.1,1.1)
+            plt.legend().get_frame().set_alpha(0) 
+            plt.grid(which='major', axis='both', alpha=0.5,linestyle=':')
+            plt.savefig(outdir + f'{obs}_SNRx.png',
+                        bbox_inches='tight',format='png',dpi=fig.dpi,facecolor='white', transparent=False)
+            plt.close()
 
-        snr_profiler.end_and_save_profiler()
-        profile_manager.active_profilers.remove(snr_profiler)
-    logging.info(f"\n**Final results:")
-    
-    # Final print block
-    dp_profiler.add_section("File print block")
-    if total_skipped>0:
-        logging.info(f'\n\t{total_skipped}/{ndats} dat files skipped. Check the log for skipped filenames.\n')
-    end, time_label = DOT.get_elapsed_time(start)
-    logging.info(f"\t{len(dat_files)} dats with {total_hits} total hits cross referenced and {total_exact_matches} hits removed as exact matches.")
-    logging.info(f"\tThe remaining {total_hits-total_exact_matches} hits were correlated and processed in \n\n\t\t%.2f {time_label}.\n" %end)
-    if 'SNR_ratio' in full_df.columns and full_df['SNR_ratio'].notnull().any():
-        logging.info(f"\t{len(full_df[full_df.SNR_ratio>sf])}/{len(full_df)} hits above a SNR-ratio of {sf:.1f}\n")
-        logging.info(f"\t{above_cutoff}/{len(full_df)} hits above the nominal cutoff.")
-    elif 'SNR_ratio' in full_df.columns:
-        logging.info(f"\n\tSNR_ratios missing for some hits, possibly due to missing filterbank files. Please check the log.")
-    elif 'mySNRs'==full_df.columns[-1]:
-        logging.info(f"\n\tSingle SNR calculated, possibly due to only one filterbank file being found. Please check the log.")
-    
-    if 'SNR_ratio' not in full_df.columns or full_df['SNR_ratio'].isnull().any():
-        # save the broken dataframe to csv
-        logging.info(f"\nScores in full dataframe not filled out correctly. Please check it:\n{outdir}{obs}_DOTnbeam.csv")
-    else:
-        logging.info(f"\nThe full dataframe was saved to: {outdir}{obs}_DOTnbeam.csv")
+            above_cutoff=0
+            for i,score in enumerate(x):
+                if np.interp(score,xcutoff,ycutoff)<SNRr[i]:
+                    above_cutoff+=1
 
-    # Signal the monitoring thread to exit
-    dp_profiler.add_section("Signal the monitoring thread to exit")
-    exit_flag.set()
+            snr_profiler.end_and_save_profiler()
+            profile_manager.active_profilers.remove(snr_profiler)
+        logging.info(f"\n**Final results:")
+        
+        # Final print block
+        dp_profiler.add_section("File print block")
+        if total_skipped>0:
+            logging.info(f'\n\t{total_skipped}/{ndats} dat files skipped. Check the log for skipped filenames.\n')
+        end, time_label = DOT.get_elapsed_time(start)
+        logging.info(f"\t{len(dat_files)} dats with {total_hits} total hits cross referenced and {total_exact_matches} hits removed as exact matches.")
+        logging.info(f"\tThe remaining {total_hits-total_exact_matches} hits were correlated and processed in \n\n\t\t%.2f {time_label}.\n" %end)
+        if 'SNR_ratio' in full_df.columns and full_df['SNR_ratio'].notnull().any():
+            logging.info(f"\t{len(full_df[full_df.SNR_ratio>sf])}/{len(full_df)} hits above a SNR-ratio of {sf:.1f}\n")
+            logging.info(f"\t{above_cutoff}/{len(full_df)} hits above the nominal cutoff.")
+        elif 'SNR_ratio' in full_df.columns:
+            logging.info(f"\n\tSNR_ratios missing for some hits, possibly due to missing filterbank files. Please check the log.")
+        elif 'mySNRs'==full_df.columns[-1]:
+            logging.info(f"\n\tSingle SNR calculated, possibly due to only one filterbank file being found. Please check the log.")
+        
+        if 'SNR_ratio' not in full_df.columns or full_df['SNR_ratio'].isnull().any():
+            # save the broken dataframe to csv
+            logging.info(f"\nScores in full dataframe not filled out correctly. Please check it:\n{outdir}{obs}_DOTnbeam.csv")
+        else:
+            logging.info(f"\nThe full dataframe was saved to: {outdir}{obs}_DOTnbeam.csv")
 
-    # Allow some time for the monitoring thread to finish
-    dp_profiler.add_section("Allow some time for the monitoring thread to finish")
-    monitor_thread.join(timeout=5)  # Adjust the timeout if needed
+        # Signal the monitoring thread to exit
+        dp_profiler.add_section("Signal the monitoring thread to exit")
+        exit_flag.set()
 
-    # Calculate and print the average CPU usage over time
-    dp_profiler.add_section("Calculate and print the average CPU usage over time")
-    if samples:
-        num_samples = len(samples)
-        num_cores = len(samples[0])
-        avg_cpu_usage = [round(sum(cpu_usage[i] for cpu_usage in samples) / num_samples,1) for i in range(num_cores)]
+        # Allow some time for the monitoring thread to finish
+        dp_profiler.add_section("Allow some time for the monitoring thread to finish")
+        monitor_thread.join(timeout=5)  # Adjust the timeout if needed
 
-        logging.info(f"\nFinal average CPU usage over {num_cores} cores:")
-        logging.info(avg_cpu_usage)
+        # Calculate and print the average CPU usage over time
+        dp_profiler.add_section("Calculate and print the average CPU usage over time")
+        if samples:
+            num_samples = len(samples)
+            num_cores = len(samples[0])
+            avg_cpu_usage = [round(sum(cpu_usage[i] for cpu_usage in samples) / num_samples,1) for i in range(num_cores)]
 
-    logging.info(f"\n\tProgram complete!\n")
+            logging.info(f"\nFinal average CPU usage over {num_cores} cores:")
+            logging.info(avg_cpu_usage)
+
+        logging.info(f"\n\tProgram complete!\n")
+    except KeyboardInterrupt:
+        print("\n\tExiting with Ctrl+C\n\tCleaning up...")
+    finally:
+        # Clean up active profilers
+        profile_manager.stop_and_save_all()
     return None
 
 #%% run it!
