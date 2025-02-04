@@ -125,9 +125,10 @@ def check_cmd_args(args):
 def dat_to_dataframe(args):
     dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
     start = time.time()
+    profile_manager = ProfileManager()
 
     # PROF_DST - avoid using global vairables 
-    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/"+"Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/"+"data_to_dataframe/"+dat+"/"
+    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel"+"/data_to_dataframe/"+dat+"/"
     dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=False)
 
     """ATTENTION - 0.0, 132m, 136m, 76m, 64m, 84m, 125m, 190m, 75m, 0.0, 3m, 69m, 38m
@@ -281,7 +282,7 @@ def main(cmd_args):
 
     try:
         
-        scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy//DOTParallel/" # PROF_DST
+        scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel/" # PROF_DST
         dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
 
         """OKAY - Threading takes 0.0 seconds"""
