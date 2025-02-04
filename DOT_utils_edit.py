@@ -205,6 +205,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     Same target_fil for every row in a given data frame = always same metadata
     Don't recalc metadata constants for each hit
     """
+    print("in DOT_utils_edit not WFHItonly")
     # identify the target beam .fil file
     first_row = df.iloc[0]
     matching_col = first_row.filter(like='fil_').apply(lambda x: x == first_row['dat_name']).idxmax()
