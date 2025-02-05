@@ -164,8 +164,8 @@ def mySNR(power):
     # assume the middle 90 percent of the array represent the noise
     noise_els=mid_90(power)  
     # get the median of the noise
-    # median_noise=noise_median(power) # call mid_90 only 1x
-    median_noise=np.median(mid_90)
+    median_noise=noise_median(power) # call mid_90 only 1x
+    # median_noise=np.median(mid_90)
     # zero out the noise by subtracting off the median
     zeroed_noise=noise_els-median_noise     
     # get the standard deviation of the noise using median instead of mean
@@ -253,6 +253,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         if r%200==0: print(f"{r}/{num_rows}") # TODO for debug only 
         # print(row) # TODO a single row is a formatted single string of multiple columns? :/
         if resume_index is not None and r < resume_index:
+            print(resume_index)
             continue  # skip rows before the resume index
        
         # calculate the narrow signal window using the reported drift rate and metadata
