@@ -101,6 +101,54 @@ def parse_args():
         odict["outdir"] = outdir  
     return odict
 
+def check_cmd_args(args):
+    # Check for trailing slash in the directory path and add it if absent
+    odict = args if type(args) == dict else vars(args)
+    if odict["outdir"]:
+        # outdir = odict["outdir"][0]
+        outdir = odict["outdir"]
+        if outdir[-1] != "/":
+            outdir += "/"
+        odict["outdir"] = outdir  
+    else:
+        odict["outdir"] = "" # this should actually be default to datdir in csv
+
+    # Set defaults when not using parser bc not using cmd line args
+    if "col" not in odict:
+        odict["col"] = None
+    if "op" not in odict:
+        odict["op"] = None
+    if "val" not in odict:
+        odict["val"] = None
+    if "stack" not in odict:
+        odict["stack"] = None
+    if "zoom" not in odict:
+        odict["zoom"] = None
+    if "nbeams" not in odict:
+        odict["nbeams"] = 2
+    if "tbeam" not in odict:
+        odict["tbeam"] = 0
+    if "sf" not in odict:
+        odict["sf"] = 4.0
+    if "num_backup_plots" not in odict:
+        odict["num_backup_plots"] = 1
+    if "cutoff" not in odict:
+        odict["cutoff"] = 500
+    if "clobber" not in odict:
+        odict["clobber"] = False
+    if "pdf" not in odict:
+        odict["pdf"] = False
+    if "before" not in odict:
+        odict["before"] = None
+    if "after" not in odict:
+            odict["after"] = None
+    if "fbelow" not in odict:
+            odict["fbelow"] = None
+    if "fabove" not in odict:
+            odict["fabove"] = None
+    # Returns the input argument as a labeled array
+    return odict
+
 # function to help parse space separated tuple input from command line 
 def list_parser(input_str):
     try:
