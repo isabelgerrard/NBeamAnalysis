@@ -141,11 +141,13 @@ def check_cmd_args(args):
     if "before" not in odict:
         odict["before"] = None
     if "after" not in odict:
-            odict["after"] = None
+        odict["after"] = None
     if "fbelow" not in odict:
-            odict["fbelow"] = None
+        odict["fbelow"] = None
     if "fabove" not in odict:
-            odict["fabove"] = None
+        odict["fabove"] = None
+    if "freqs" not in odict:
+        odict["freqs"] = None
     # Returns the input argument as a labeled array
     return odict
 
