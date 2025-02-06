@@ -125,7 +125,7 @@ def check_cmd_args(args):
 def dat_to_dataframe(args):
     dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
     dat_name = "/".join(dat.split("/")[-2:])
-    node_name = dat.split("/")[-3]
+    node_name = dat.split("/")[-2]
     start = time.time()
     profile_manager = ProfileManager()
 
