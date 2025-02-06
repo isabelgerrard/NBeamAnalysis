@@ -33,8 +33,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.ticker import ScalarFormatter
 
-import DOT_utils as DOT
-# import DOT_utils_edit as DOT
+# import DOT_utils as DOT
+import DOT_utils_edit as DOT
 # import DOT_utils_wfhitlooponly as DOT
 from time_profiler import ProfileManager, TimeProfiler
 
@@ -131,7 +131,8 @@ def dat_to_dataframe(args):
 
     # PROF_DST - avoid using global vairables 
     # dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
-    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
+    # dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
+    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/wf_vector_attr_nodata_noss_noctl_1core/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
     dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=False)
 
     """ATTENTION - 0.0, 132m, 136m, 76m, 64m, 84m, 125m, 190m, 75m, 0.0, 3m, 69m, 38m
@@ -285,7 +286,8 @@ def main(cmd_args):
 
     try:
         # scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel/" # PROF_DST
-        scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel/" # PROF_DST
+        # scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel/" # PROF_DST
+        scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/wf_vector_attr_nodata_noss_noctl_1core/DOTParallel/" # PROF_DST
         dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
 
         """OKAY - Threading takes 0.0 seconds"""
