@@ -123,7 +123,8 @@ def check_cmd_args(args):
 # perform cross-correlation to pare down the list of hits if flagged with sf, 
 # and put the remaining hits into a dataframe.
 def dat_to_dataframe(args):
-    dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
+    # dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
+    dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst = args
     dat_name = "/".join(dat.split("/")[-2:])
     node_name = dat.split("/")[-2]
     start = time.time()
@@ -132,7 +133,7 @@ def dat_to_dataframe(args):
     # PROF_DST - avoid using global vairables 
     # dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
     # dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
-    dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/wf_vector_attr_nodata_noss_noctl_1core/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
+    dd_time_dst = prof_dst+"DOTParallel/data_to_dataframe/"+node_name+"/"
     dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=False)
 
     """ATTENTION - 0.0, 132m, 136m, 76m, 64m, 84m, 125m, 190m, 75m, 0.0, 3m, 69m, 38m
@@ -282,12 +283,13 @@ def dat_to_dataframe(args):
 
     # Main program execution
 def main(cmd_args):
+    prof_dst = cmd_args["profdst"]  # todo, just path for where profiling logs going to 
     profile_manager = ProfileManager()
 
     try:
         # scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel/" # PROF_DST
         # scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel/" # PROF_DST
-        scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/wf_vector_attr_nodata_noss_noctl_1core/DOTParallel/" # PROF_DST
+        scan_time_dst = prof_dst + "DOTParallel/" # PROF_DST
         dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
 
         """OKAY - Threading takes 0.0 seconds"""
@@ -317,6 +319,7 @@ def main(cmd_args):
         before = cmd_args["before"]     # optional, MJD to limit observations
         after = cmd_args["after"]       # optional, MJD to limit observations
         bliss = cmd_args["bliss"]       # optional, set True if using bliss
+        
 
         # create the output directory if the specified path does not exist
         if not os.path.isdir(outdir):
@@ -405,7 +408,7 @@ def main(cmd_args):
         # todo 
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if "LoA.C0352" not in dat_file and "LoB.C1120" not in dat_file and "LoB.C0928" not in dat_file]
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if "LoA.C0352" not in dat_file]
-        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files]
+        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files]
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files[:2]] # TODO debug
         """
         Pool.imap_unordered: Tasks are dynamically allocated to workers as they become available. Once a worker finishes a task, it grabs the next available task from the queue. This ensures all workers stay busy, minimizing idle time, even with uneven runtimes.
