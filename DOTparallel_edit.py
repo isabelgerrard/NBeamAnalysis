@@ -137,47 +137,60 @@ def dat_to_dataframe(args):
     dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=False)
 
     """ATTENTION - 0.0, 132m, 136m, 76m, 64m, 84m, 125m, 190m, 75m, 0.0, 3m, 69m, 38m
-    BUT maybe not and is profiler issue ???
-    maybe only taking a while because dont close profiler if not fils cases 
     """
 
-    """
+    """ TODO 
     Lock is only meant to synchronized shared resources, which is just the proc_count.
     The string manipulations and logging does not need to be locked but doesnt get done because waiting for the lock to update proc_count.
     Save proc_count locally !"""
 
+    """ TODO 
+    writing to same log file also could be requiring synchronization
+    """
+
     dataframe_profiler.add_section("with count_lock")
+    count_lock_profiler = profile_manager.start_profiler("proc", "2_with_count_lock", dd_time_dst, restart=False)
+    # dat_name = "/".join(dat.split("/")[-2:])
+    # get the common subdirectories with trailing "/"
+    count_lock_profiler.add_section("with count_lock update proc_count value")
     with count_lock:
-        count_lock_profiler = profile_manager.start_profiler("proc", "2_with_count_lock", dd_time_dst, restart=False)
-        # dat_name = "/".join(dat.split("/")[-2:])
-        # get the common subdirectories with trailing "/"
+        proc_count.value += 1
+        curr_proc_count = proc_count.value
+
+        """
+        okay what is all the reading was in lock for now but combing through is parallelized because this takes no time anyway
+        """
+
         count_lock_profiler.add_section("get the common subdirectories with trailing ")
         subdirectories="/".join(dat.replace(datdir,"").split("/")[:-1])+"/"
         fil_MJD="_".join(dat.split('/')[-1].split("_")[:3])
-        proc_count.value += 1
+        # proc_count.value += 1
         # optionally skip if outside input MJD bounds
         count_lock_profiler.add_section("Optionally skip if outside input MJD bounds")
         if before and float(".".join(fil_MJD[4:].split("_"))[:len(before[0])]) >= float(".".join(before[0].split("_"))):
-            logging.info(f'Skipping dat file {proc_count.value}/{ndats} occurring after input MJD ({before[0]}):\n\t{dat_name}')
+            logging.info(f'Skipping dat file {curr_proc_count}/{ndats} occurring after input MJD ({before[0]}):\n\t{dat_name}')
             count_lock_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(count_lock_profiler)
             dataframe_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),0,1,0
         if after and float(".".join(fil_MJD[4:].split("_"))[:len(after[0])]) <= float(".".join(after[0].split("_"))):
-            logging.info(f'Skipping dat file {proc_count.value}/{ndats} occurring before input MJD ({after[0]}):\n\t{dat_name}')
+            logging.info(f'Skipping dat file {curr_proc_count}/{ndats} occurring before input MJD ({after[0]}):\n\t{dat_name}')
             count_lock_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(count_lock_profiler)
             dataframe_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),0,1,0
-        logging.info(f'\nProcessing dat file {proc_count.value}/{ndats}\n\t{dat_name}')
+        logging.info(f'\nProcessing dat file {curr_proc_count}/{ndats}\n\t{dat_name}')
         hits,skipped,exact_matches=0,0,0
         # make a tuple with the corresponding fil/h5 files
         # fils=sorted(glob.glob(fildir+subdirectories+fil_MJD+'*fil'))
         count_lock_profiler.add_section("Sorting subdirectories")
+        """
+        glob.glob is a read so doesnt need to be synchronized inside lock if not being written to
+        """
         fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*fil'))
-        
+
         if not fils:
             print("No fil files. Looking for fbh5/h5 instead.")
             # TODO this step is taking a while - probs because using sorting
@@ -202,9 +215,11 @@ def dat_to_dataframe(args):
         count_lock_profiler.end_and_save_profiler()
         profile_manager.active_profilers.remove(count_lock_profiler)
         """END - ATTENTION"""
+        x = 1
 
+        """ TODO porbably end count lock here""" 
         # make a dataframe containing all the hits from all the dat files in the tuple and sort them by frequency
-        """OKAY - load_dat_sf takes 0.0 seconds"""
+        #  """OKAY - load_dat_sf takes 0.0 seconds"""
         dataframe_profiler.add_section("DOT.load_dat_df")
         load_dat_profiler = profile_manager.start_profiler("proc", "3_load_dat_df", dd_time_dst, restart=False)
         load_dat_profiler.add_section("DOT.load_dat_df")
@@ -412,16 +427,14 @@ def main(cmd_args):
 
         """ATTENTION - takes 3+ HOURS"""
         parallel_profiler.add_section("Execute parallelized function")
+
+        test_nodes = ["LoA.C0544", "LoA.C0736", "LoA.C1120"]
+
         # todo 
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if "LoA.C0352" not in dat_file and "LoB.C1120" not in dat_file and "LoB.C0928" not in dat_file]
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if "LoA.C0352" not in dat_file]
-        # test_nodes = ["LoA.C0544", "LoA.C0736", "LoA.C1120"]
-        # print("datfiles")
-        # print(dat_files)
-        
-        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files]
-        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files if any(node in dat_file for node in test_nodes)]
-
+        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files]
+        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files if any(node in dat_file for node in test_nodes)]
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files[:2]] # TODO debug
         """
         Pool.imap_unordered: Tasks are dynamically allocated to workers as they become available. Once a worker finishes a task, it grabs the next available task from the queue. This ensures all workers stay busy, minimizing idle time, even with uneven runtimes.
