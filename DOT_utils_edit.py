@@ -14,10 +14,17 @@ import sys
 import blimpy as bl
 # print(bl.__file__)
 import logging
+from pathlib import Path
 
 # hdf_reader.examine_h5(None)
 # logging function
 def setup_logging(log_filename):
+    if not os.path.exists(log_filename):
+        # create parent folder (if dont split then turns filename into a dir)
+        Path('/'.join(log_filename.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
+        # create file
+        open(log_filename, 'w+').close()
+
     # Import the logging module and configure the root logger
     logging.basicConfig(level=logging.INFO, filemode='w', format='%(message)s')
 
@@ -41,6 +48,51 @@ def setup_logging(log_filename):
     # Set the logger as the default logger for the logging module
     logging.getLogger('').handlers = [console_handler, file_handler]
     return None
+
+def get_specific_logger(logfile):
+    """
+    Allows to have multiple logger files. Creates root logger if does not exist. 
+    Allows multiple processes to log without having to synchronize them so they don't block each other. 
+    """
+    if not os.path.exists(logfile):
+        # create parent folder (if dont split then turns filename into a dir)
+        Path('/'.join(logfile.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
+        # create file
+        open(logfile, 'w+').close()
+
+    try: # setup logging if haven't yet
+        root_logger = logging.getLogger()
+    except:
+        setup_logging(logfile)
+        root_logger = logging.getLogger()
+
+    # creates named logger
+    specific_logger = logging.getLogger(logfile)
+
+    # doesn't already exist
+    if not specific_logger.handlers:
+        # Create a file handler that writes to the specified file
+        file_handler = logging.FileHandler(logfile)
+        file_handler.setLevel(logging.INFO)
+        specific_logger.addHandler(file_handler)
+        # TODO do i need this ?
+        # root_logger.addHandler(file_handler)
+
+    return specific_logger
+
+# def get_specific_logger(logfile):
+#     """
+#     Returns logger associated with logfile or creates it / the root if it/they do not exist.
+#     """
+#     try:
+#         logger = logging.getLogger(logfile)
+#     except:
+#         # TODO this should be checking for the specific exception type
+#         _setup_another_logger(logfile)
+#         logger = logging.getLogger(logfile)
+#         logger = logging.Handl
+#     return logger
+
 
 # elapsed time function
 def get_elapsed_time(start=0):
@@ -205,19 +257,27 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     Same target_fil for every row in a given data frame = always same metadata
     Don't recalc metadata constants for each hit
     """
-    print("in DOT_utils_edit not WFHItonly")
+
+    print("in DOT_utils_edit")
     # identify the target beam .fil file
     first_row = df.iloc[0]
     matching_col = first_row.filter(like='fil_').apply(lambda x: x == first_row['dat_name']).idxmax()
     target_fil = first_row[matching_col]
 
+    """
+    Access process specific log file so can write within its process wihtout needing to synchronize
+    """
+    node_name = first_row['dat_name'].split("/")[-2]
+    logfile=outdir+f'/{node_name}_out.txt'
+    curr_proc_logger = get_specific_logger(logfile)
+
     try:
-        print(f"fetching meta for {target_fil}")
+        print(f"[{node_name}] fetching meta for {target_fil}")
+        # curr_proc_logger.info(f"fetching meta for {target_fil}")
         fil_meta = bl.Waterfall(target_fil,load_data=False)
     except Exception as e:
-        print(f"FAILED : fil_meta = bl.Waterfall(target_fil, load_data=False) for {target_fil}")
-        print(e)
-        logging.warning(f"Failed to load fil meta with bl.Waterfall for {target_fil} - skipping this node...")
+        curr_proc_logger.warning(f"Failed to load fil meta with bl.Waterfall for {target_fil} - skipping this node...")
+        curr_proc_logger.info(e)
         return
     
     # determine the frequency boundaries in the .fil file
@@ -247,10 +307,10 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
 
     # this is pointer to those waterfall objects 
 
-    print("and now looping through hits")
+    print(f"[{node_name}] Beginning loop through hits...")
     num_rows = len(df)
     for r,row in df.iterrows(): # each hit
-        if r%200==0: print(f"{r}/{num_rows}") # TODO for debug only 
+        if r%200==0: print(f"\t[{node_name}] {r}/{num_rows}") # TODO for debug only 
         # print(row) # TODO a single row is a formatted single string of multiple columns? :/
         if resume_index is not None and r < resume_index:
             # print(resume_index)
@@ -270,10 +330,10 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         f1=round(max(fmid-half_span*1e-6,minimum_frequency),6)
         f2=round(min(fmid+half_span*1e-6,maximum_frequency),6)
 
-        if fmid-half_span*1e-6 < minimum_frequency:
-            print(f"setting to minimum {minimum_frequency}\n{fmid-half_span*1e-6} --> {f1}")
-        if fmid+half_span*1e-6 > maximum_frequency:
-            print(f"setting to maximum {maximum_frequency}\n{fmid+half_span*1e-6} --> {f2}")
+        # if fmid-half_span*1e-6 < minimum_frequency:
+        #     print(f"setting to minimum {minimum_frequency}\n{fmid-half_span*1e-6} --> {f1}")
+        # if fmid+half_span*1e-6 > maximum_frequency:
+        #     print(f"setting to maximum {maximum_frequency}\n{fmid+half_span*1e-6} --> {f2}")
         # grab the signal data in the target beam fil file
         """
         ATTENTION - this calls wf_data which takes .5s and about 1000 calls but seems like calling waterfall twice?
@@ -331,7 +391,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
             df.loc[r,'SNR_ratio'] = sum(SNR_ratios)/len(SNR_ratios)  
             # df.loc[r,'x'] = sum(xs)/len(xs)                          
         # pickle the dataframe and row index for resuming
-        if pickle_off==False:
+        if not pickle_off:
             with open(outdir+f'{obs}_comb_df.pkl', 'wb') as f:
                 pickle.dump((r, df), f) 
     # remove the pickle checkpoint file after all loops complete

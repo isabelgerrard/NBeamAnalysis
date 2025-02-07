@@ -130,6 +130,7 @@ def dat_to_dataframe(args):
     start = time.time()
     profile_manager = ProfileManager()
 
+    
     # PROF_DST - avoid using global vairables 
     # dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
     # dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
@@ -158,6 +159,14 @@ def dat_to_dataframe(args):
         curr_proc_count = proc_count.value
 
         """
+        Different log file per process so don't need to lock
+        """
+        logfile=outdir+f'/{node_name}_out.txt'
+        # print(logfile)
+        curr_proc_logger = DOT.get_specific_logger(logfile)
+        # print(f"setup log file to {logfile}")
+        # print(curr_proc_logger)
+        """
         okay what is all the reading was in lock for now but combing through is parallelized because this takes no time anyway
         """
 
@@ -168,20 +177,20 @@ def dat_to_dataframe(args):
         # optionally skip if outside input MJD bounds
         count_lock_profiler.add_section("Optionally skip if outside input MJD bounds")
         if before and float(".".join(fil_MJD[4:].split("_"))[:len(before[0])]) >= float(".".join(before[0].split("_"))):
-            logging.info(f'Skipping dat file {curr_proc_count}/{ndats} occurring after input MJD ({before[0]}):\n\t{dat_name}')
+            curr_proc_logger.info(f'Skipping dat file {curr_proc_count}/{ndats} occurring after input MJD ({before[0]}):\n\t{dat_name}')
             count_lock_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(count_lock_profiler)
             dataframe_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),0,1,0
         if after and float(".".join(fil_MJD[4:].split("_"))[:len(after[0])]) <= float(".".join(after[0].split("_"))):
-            logging.info(f'Skipping dat file {curr_proc_count}/{ndats} occurring before input MJD ({after[0]}):\n\t{dat_name}')
+            curr_proc_logger.info(f'Skipping dat file {curr_proc_count}/{ndats} occurring before input MJD ({after[0]}):\n\t{dat_name}')
             count_lock_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(count_lock_profiler)
             dataframe_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),0,1,0
-        logging.info(f'\nProcessing dat file {curr_proc_count}/{ndats}\n\t{dat_name}')
+        curr_proc_logger.info(f'\nProcessing dat file {curr_proc_count}/{ndats}\n\t{dat_name}')
         hits,skipped,exact_matches=0,0,0
         # make a tuple with the corresponding fil/h5 files
         # fils=sorted(glob.glob(fildir+subdirectories+fil_MJD+'*fil'))
@@ -197,116 +206,123 @@ def dat_to_dataframe(args):
             # also pretty sure the sorting is doing something weird anyway
             count_lock_profiler.add_section("If not fils - Sorting subdirectories again ?")
             fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*h5'))
+        """
+        not even globbing after this. just the load_dat_df
+        """
         if not fils:
             count_lock_profiler.add_section("Skipping because could not locate filterbank files ?")
-            logging.info(f'\tWARNING! Could not locate filterbank files in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
-            logging.info(f'\tSkipping...\n')
+            curr_proc_logger.info(f'\tWARNING! Could not locate filterbank files in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
+            curr_proc_logger.info(f'\tSkipping...\n')
             skipped+=1
             mid, time_label = DOT.get_elapsed_time(start)
-            logging.info(f"Finished processing in %.2f {time_label}." %mid)
+            curr_proc_logger.info(f"\t[{node_name}]Finished processing in %.2f {time_label}." %mid)
             count_lock_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(count_lock_profiler)
             dataframe_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),hits,skipped,exact_matches
         elif len(fils)==1:
-            logging.info(f'\tWARNING! Could only locate 1 filterbank file in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
-            logging.info(f'\tProceeding with caution...')
+            curr_proc_logger.info(f'\tWARNING! Could only locate 1 filterbank file in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
+            curr_proc_logger.info(f'\tProceeding with caution...')
         count_lock_profiler.end_and_save_profiler()
         profile_manager.active_profilers.remove(count_lock_profiler)
         """END - ATTENTION"""
-        x = 1
 
-        """ TODO porbably end count lock here""" 
         # make a dataframe containing all the hits from all the dat files in the tuple and sort them by frequency
         #  """OKAY - load_dat_sf takes 0.0 seconds"""
         dataframe_profiler.add_section("DOT.load_dat_df")
         load_dat_profiler = profile_manager.start_profiler("proc", "3_load_dat_df", dd_time_dst, restart=False)
         load_dat_profiler.add_section("DOT.load_dat_df")
         df0 = DOT.load_dat_df(dat,fils)
-        load_dat_profiler.add_section("Sort by Corrected_frequency")
-        df0 = df0.sort_values('Corrected_Frequency').reset_index(drop=True)
-        if df0.empty:
-            load_dat_profiler.add_section("df0.empty True")
-            logging.info(f'\tWARNING! No hits found in this dat file.')
-            logging.info(f'\tSkipping...')
-            skipped+=1
-            mid, time_label = DOT.get_elapsed_time(start)
-            logging.info(f"Finished processing in %.2f {time_label}." %mid)
-            load_dat_profiler.end_and_save_profiler()
-            profile_manager.active_profilers.remove(load_dat_profiler)
-            dataframe_profiler.end_and_save_profiler()
-            profile_manager.active_profilers.remove(dataframe_profiler)
-            return pd.DataFrame(),hits,skipped,exact_matches
+        print("\n\t**RELEASING LOCK**\n")
+        
+    load_dat_profiler.add_section("Sort by Corrected_frequency")
+    df0 = df0.sort_values('Corrected_Frequency').reset_index(drop=True)
+    if df0.empty:
+        load_dat_profiler.add_section("df0.empty True")
+        curr_proc_logger.info(f'\tWARNING! No hits found in this dat file.')
+        curr_proc_logger.info(f'\tSkipping...')
+        skipped+=1
+        mid, time_label = DOT.get_elapsed_time(start)
+        curr_proc_logger.info(f"Finished processing in %.2f {time_label}." %mid)
         load_dat_profiler.end_and_save_profiler()
         profile_manager.active_profilers.remove(load_dat_profiler)
-        """END - load_dat_sf takes 0.0 seconds"""
+        dataframe_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(dataframe_profiler)
+        return pd.DataFrame(),hits,skipped,exact_matches
+    load_dat_profiler.end_and_save_profiler()
+    profile_manager.active_profilers.remove(load_dat_profiler)
+    """END - load_dat_sf takes 0.0 seconds"""
 
-        """ATTENTION - Takes 1.5 min per NODE, 5s, 3s, 7s, 8s, 7s, 0, 0, 0, 1, 0, 0, 14, 1, 0, 0"""
-        sf_profiler = profile_manager.start_profiler("proc", "4_sf", dd_time_dst, restart=False)
-        dataframe_profiler.add_section("Apply spatial filtering if turned on with sf flag")
-        # apply spatial filtering if turned on with sf flag (default is off)
-        if sf!=None:  
-            sf_profiler.add_section("DOT.cross_ref")
-            df = DOT.cross_ref(df0,sf)
-            exact_matches+=len(df0)-len(df)
-            hits+=len(df0)
-            mid, time_label = DOT.get_elapsed_time(start)
-            # TODO this should be amount of time for this file not since beginning 
-            # actually this means all starting at same time but still doing these one at a time = is it actually using all the cores ?
-            logging.info(f"\t{len(df0)-len(df)}/{len(df0)} hits removed as exact frequency matches in %.2f {time_label}." %mid)
-            start = time.time()
-        else:
-            sf_profiler.add_section("sf == None")
-            df = df0
-            hits+=len(df0)
-        sf_profiler.end_and_save_profiler()
-        profile_manager.active_profilers.remove(sf_profiler)
-        """END - Takes 1.5 min per NODE"""
-
-        """ATTENTION - takes 2 min, 4.5 min, 70 min, 48s, 1min40, 3m16, 4m30, 1m60, 1m40, 38m, 34m, 15m, 36
-        12221.138 12221.138 12221.138 12221.138 {method 'enable' of '_lsprof.Profiler' objects}
-        """
-        comb_profiler = profile_manager.start_profiler("proc", "5_comb_and_correlate", dd_time_dst, restart=False)
-        dataframe_profiler.add_section("Comb through the dataframe, correlate beam power for each hit and calculate attenuation with SNR-ratio")
-        # comb through the dataframe, correlate beam power for each hit and calculate attenuation with SNR-ratio
-        if df.empty:
-            comb_profiler.add_section("Empty dataframe")
-            logging.info(f'\tWARNING! Empty dataframe constructed after spatial filtering of dat file.')
-            logging.info(f'\tSkipping this dat file because there are no remaining hits to comb through...')
-            skipped+=1
-            mid, time_label = DOT.get_elapsed_time(start)
-            logging.info(f"Finished processing in %.2f {time_label}." %mid)
-            comb_profiler.end_and_save_profiler()
-            profile_manager.active_profilers.remove(comb_profiler)
-            dataframe_profiler.end_and_save_profiler()
-            profile_manager.active_profilers.remove(dataframe_profiler)
-            return pd.DataFrame(),hits,skipped,exact_matches
-        else:
-            """ATTENTION - NO THIS IS THE PART TAKING TIME 
-            """
-            comb_df_profiler = profile_manager.start_profiler("proc", "6_DOT.comb_df", dd_time_dst, restart=False)
-            comb_profiler.add_section(f"\tCombing through the remaining {len(df)} hits.")
-            logging.info(f"\tCombing through the remaining {len(df)} hits.")
-            # print(np.shape(df))
-            temp_df = DOT.comb_df(df,outdir,obs,pickle_off=True,sf=sf)
-            comb_df_profiler.end_and_save_profiler()
-            profile_manager.active_profilers.remove(comb_df_profiler)
-            """END - ATTENTION"""
+    """ATTENTION - Takes 1.5 min per NODE, 5s, 3s, 7s, 8s, 7s, 0, 0, 0, 1, 0, 0, 14, 1, 0, 0"""
+    sf_profiler = profile_manager.start_profiler("proc", "4_sf", dd_time_dst, restart=False)
+    dataframe_profiler.add_section("Apply spatial filtering if turned on with sf flag")
+    # apply spatial filtering if turned on with sf flag (default is off)
+    if sf!=None:  
+        sf_profiler.add_section("DOT.cross_ref")
+        df = DOT.cross_ref(df0,sf)
+        exact_matches+=len(df0)-len(df)
+        hits+=len(df0)
         mid, time_label = DOT.get_elapsed_time(start)
-        # TODO but this time is differen than above ... 
-        logging.info(f"Finished processing in %.2f {time_label}." %mid)
+        # TODO this should be amount of time for this file not since beginning 
+        # actually this means all starting at same time but still doing these one at a time = is it actually using all the cores ?
+        curr_proc_logger.info(f"\t{len(df0)-len(df)}/{len(df0)} hits removed as exact frequency matches in %.2f {time_label}." %mid)
+        start = time.time()
+    else:
+        sf_profiler.add_section("sf == None")
+        df = df0
+        hits+=len(df0)
+    sf_profiler.end_and_save_profiler()
+    profile_manager.active_profilers.remove(sf_profiler)
+    """END - Takes 1.5 min per NODE"""
+
+    """ATTENTION - takes 2 min, 4.5 min, 70 min, 48s, 1min40, 3m16, 4m30, 1m60, 1m40, 38m, 34m, 15m, 36
+    12221.138 12221.138 12221.138 12221.138 {method 'enable' of '_lsprof.Profiler' objects}
+    """
+    comb_profiler = profile_manager.start_profiler("proc", "5_comb_and_correlate", dd_time_dst, restart=False)
+    dataframe_profiler.add_section("Comb through the dataframe, correlate beam power for each hit and calculate attenuation with SNR-ratio")
+    # comb through the dataframe, correlate beam power for each hit and calculate attenuation with SNR-ratio
+    if df.empty:
+        comb_profiler.add_section("Empty dataframe")
+        curr_proc_logger.info(f'\tWARNING! Empty dataframe constructed after spatial filtering of dat file.')
+        curr_proc_logger.info(f'\tSkipping this dat file because there are no remaining hits to comb through...')
+        skipped+=1
+        mid, time_label = DOT.get_elapsed_time(start)
+        curr_proc_logger.info(f"Finished processing in %.2f {time_label}." %mid)
         comb_profiler.end_and_save_profiler()
         profile_manager.active_profilers.remove(comb_profiler)
         dataframe_profiler.end_and_save_profiler()
         profile_manager.active_profilers.remove(dataframe_profiler)
-        return temp_df,hits,skipped,exact_matches
+        return pd.DataFrame(),hits,skipped,exact_matches
+    else:
+        """ATTENTION - NO THIS IS THE PART TAKING TIME 
+        """
+        comb_df_profiler = profile_manager.start_profiler("proc", "6_DOT.comb_df", dd_time_dst, restart=False)
+        comb_profiler.add_section(f"\tCombing through the remaining {len(df)} hits.")
+        curr_proc_logger.info(f"\tCombing through the remaining {len(df)} hits.")
+        # print(np.shape(df))
+        temp_df = DOT.comb_df(df,outdir,obs,pickle_off=True,sf=sf)
+        """dot.comb_df only reads from passed in dataframe except if pickles but here pickle_off is set to true so fine to not be locked. 
+        if it was then it could be returned and then saved to pickle with the lock"""
+        comb_df_profiler.end_and_save_profiler()
+        profile_manager.active_profilers.remove(comb_df_profiler)
+        """END - ATTENTION"""
+    mid, time_label = DOT.get_elapsed_time(start)
+    # TODO but this time is differen than above ... 
+    curr_proc_logger.info(f"Finished processing in %.2f {time_label}." %mid)
+    comb_profiler.end_and_save_profiler()
+    profile_manager.active_profilers.remove(comb_profiler)
+    dataframe_profiler.end_and_save_profiler()
+    profile_manager.active_profilers.remove(dataframe_profiler)
+    return temp_df,hits,skipped,exact_matches
 
 
     # Main program execution
 def main(cmd_args):
     prof_dst = cmd_args["profdst"]  # todo, just path for where profiling logs going to 
     profile_manager = ProfileManager()
+
+    print("in dot parallel edit")
 
     try:
         # scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel/" # PROF_DST
@@ -428,7 +444,8 @@ def main(cmd_args):
         """ATTENTION - takes 3+ HOURS"""
         parallel_profiler.add_section("Execute parallelized function")
 
-        test_nodes = ["LoA.C0544", "LoA.C0736", "LoA.C1120"]
+        test_nodes = ["LoA.C0544", "LoA.C0736", "LoA.C1120", "LoA.C1312", "LoA.C1504", \
+            "LoB.C0352","LoB.C0544", "LoB.C0736"]
 
         # todo 
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if "LoA.C0352" not in dat_file and "LoB.C1120" not in dat_file and "LoB.C0928" not in dat_file]
