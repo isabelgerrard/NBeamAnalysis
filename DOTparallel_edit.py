@@ -444,14 +444,13 @@ def main(cmd_args):
         """ATTENTION - takes 3+ HOURS"""
         parallel_profiler.add_section("Execute parallelized function")
 
-        test_nodes = ["LoA.C0544", "LoA.C0736", "LoA.C1120", "LoA.C1312", "LoA.C1504", \
-            "LoB.C0352","LoB.C0544", "LoB.C0736"]
-
+        # test_nodes = ["LoA.C0544", "LoA.C0736", "LoA.C1120", "LoA.C1312", "LoA.C1504", \
+        #     "LoB.C0352","LoB.C0544", "LoB.C0736"]
         # todo 
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if "LoA.C0352" not in dat_file and "LoB.C1120" not in dat_file and "LoB.C0928" not in dat_file]
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if "LoA.C0352" not in dat_file]
-        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files]
-        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files if any(node in dat_file for node in test_nodes)]
+        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files]
+        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files if any(node in dat_file for node in test_nodes)]
         # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files[:2]] # TODO debug
         """
         Pool.imap_unordered: Tasks are dynamically allocated to workers as they become available. Once a worker finishes a task, it grabs the next available task from the queue. This ensures all workers stay busy, minimizing idle time, even with uneven runtimes.
