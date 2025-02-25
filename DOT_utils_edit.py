@@ -250,7 +250,8 @@ def resume(pickle_file, df):
 #     return sig_cor(s0-noise_median(s0),s1-noise_median(s1))
 
 # comb through each hit in the dataframe and look for corresponding hits in each of the beams.
-def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4):
+# def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4):
+def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4, proc_count=0): # TODO debug only
     if sf==None:
         sf=4
     """
@@ -268,6 +269,8 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     Access process specific log file so can write within its process wihtout needing to synchronize
     """
     node_name = first_row['dat_name'].split("/")[-2]
+    # TODO doens't apply to other nbeam users
+    fil_name = first_row['dat_name'].split("/")[-1][10:15] # scan identifier
     logfile=outdir+f'/{node_name}_out.txt'
     curr_proc_logger = get_specific_logger(logfile)
 
@@ -307,10 +310,10 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
 
     # this is pointer to those waterfall objects 
 
-    print(f"[{node_name}] Beginning loop through hits...")
+    print(f"[{node_name}] Beginning loop through hits...\n")
     num_rows = len(df)
     for r,row in df.iterrows(): # each hit
-        if r%200==0: print(f"\t[{node_name}] {r}/{num_rows}") # TODO for debug only 
+        if r%200==0: print(f"\t[{proc_count}] [{node_name}] [{fil_name}] {r}/{num_rows}") # TODO for debug only 
         # print(row) # TODO a single row is a formatted single string of multiple columns? :/
         if resume_index is not None and r < resume_index:
             # print(resume_index)

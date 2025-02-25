@@ -34,6 +34,7 @@ import matplotlib.ticker as ticker
 from matplotlib.ticker import ScalarFormatter
 
 # import DOT_utils as DOT
+# sys.path.append("./NBeamAnalysis")
 import DOT_utils_edit as DOT
 # import DOT_utils_wfhitlooponly as DOT
 from time_profiler import ProfileManager, TimeProfiler
@@ -42,6 +43,7 @@ import logging
 import psutil
 import threading
 from multiprocessing import Pool, Manager, Lock, Process
+# from . import plot_utils
 from plot_utils import diagnostic_plotter
 
     # Define Functions
@@ -162,10 +164,7 @@ def dat_to_dataframe(args):
         Different log file per process so don't need to lock
         """
         logfile=outdir+f'/{node_name}_out.txt'
-        # print(logfile)
         curr_proc_logger = DOT.get_specific_logger(logfile)
-        # print(f"setup log file to {logfile}")
-        # print(curr_proc_logger)
         """
         okay what is all the reading was in lock for now but combing through is parallelized because this takes no time anyway
         """
@@ -215,7 +214,7 @@ def dat_to_dataframe(args):
             curr_proc_logger.info(f'\tSkipping...\n')
             skipped+=1
             mid, time_label = DOT.get_elapsed_time(start)
-            curr_proc_logger.info(f"\t[{node_name}]Finished processing in %.2f {time_label}." %mid)
+            curr_proc_logger.info(f"\n[{curr_proc_count}/{ndats}] Finished processing in %.2f {time_label}." %mid)
             count_lock_profiler.end_and_save_profiler()
             profile_manager.active_profilers.remove(count_lock_profiler)
             dataframe_profiler.end_and_save_profiler()
@@ -244,7 +243,7 @@ def dat_to_dataframe(args):
         curr_proc_logger.info(f'\tSkipping...')
         skipped+=1
         mid, time_label = DOT.get_elapsed_time(start)
-        curr_proc_logger.info(f"Finished processing in %.2f {time_label}." %mid)
+        curr_proc_logger.info(f"\n[{curr_proc_count}/{ndats}] Finished processing in %.2f {time_label}." %mid)
         load_dat_profiler.end_and_save_profiler()
         profile_manager.active_profilers.remove(load_dat_profiler)
         dataframe_profiler.end_and_save_profiler()
@@ -288,7 +287,7 @@ def dat_to_dataframe(args):
         curr_proc_logger.info(f'\tSkipping this dat file because there are no remaining hits to comb through...')
         skipped+=1
         mid, time_label = DOT.get_elapsed_time(start)
-        curr_proc_logger.info(f"Finished processing in %.2f {time_label}." %mid)
+        curr_proc_logger.info(f"\n[{curr_proc_count}/{ndats}] Finished processing in %.2f {time_label}." %mid)
         comb_profiler.end_and_save_profiler()
         profile_manager.active_profilers.remove(comb_profiler)
         dataframe_profiler.end_and_save_profiler()
@@ -299,9 +298,9 @@ def dat_to_dataframe(args):
         """
         comb_df_profiler = profile_manager.start_profiler("proc", "6_DOT.comb_df", dd_time_dst, restart=False)
         comb_profiler.add_section(f"\tCombing through the remaining {len(df)} hits.")
-        curr_proc_logger.info(f"\tCombing through the remaining {len(df)} hits.")
+        curr_proc_logger.info(f"\tCombing through the remaining {len(df)} hits.\n")
         # print(np.shape(df))
-        temp_df = DOT.comb_df(df,outdir,obs,pickle_off=True,sf=sf)
+        temp_df = DOT.comb_df(df,outdir,obs,pickle_off=True,sf=sf, proc_count=curr_proc_count)
         """dot.comb_df only reads from passed in dataframe except if pickles but here pickle_off is set to true so fine to not be locked. 
         if it was then it could be returned and then saved to pickle with the lock"""
         comb_df_profiler.end_and_save_profiler()
@@ -309,7 +308,7 @@ def dat_to_dataframe(args):
         """END - ATTENTION"""
     mid, time_label = DOT.get_elapsed_time(start)
     # TODO but this time is differen than above ... 
-    curr_proc_logger.info(f"Finished processing in %.2f {time_label}." %mid)
+    curr_proc_logger.info(f"\n[{curr_proc_count}/{ndats}] Finished processing in %.2f {time_label}." %mid)
     comb_profiler.end_and_save_profiler()
     profile_manager.active_profilers.remove(comb_profiler)
     dataframe_profiler.end_and_save_profiler()
@@ -319,19 +318,13 @@ def dat_to_dataframe(args):
 
     # Main program execution
 def main(cmd_args):
-    prof_dst = cmd_args["profdst"]  # todo, just path for where profiling logs going to 
+    time_profile_dst = cmd_args["profdst"]  # todo, just path for where profiling logs going to 
+    test_subset = cmd_args["datdir_subset"]  # todo, just path for only processing some while testing
     profile_manager = ProfileManager()
 
     print("in dot parallel edit")
 
     try:
-        # scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel/" # PROF_DST
-        # scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel/" # PROF_DST
-        scan_time_dst = prof_dst + "DOTParallel/" # PROF_DST
-        dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
-
-        """OKAY - Threading takes 0.0 seconds"""
-        dp_profiler.add_section("Threading to monitor CPU usafe during parallel execution")
         start=time.time()
 
         global exit_flag
@@ -340,10 +333,7 @@ def main(cmd_args):
         # Start a thread to monitor CPU usage during parallel execution
         monitor_thread = threading.Thread(target=monitor_cpu_usage, args=(samples,))
         monitor_thread.start()
-        """END - Threading takes 0.0 seconds"""
 
-        """OKAY - Args + File Management takes 0.0 seconds"""
-        dp_profiler.add_section("Args + file management stuff")
         # parse the command line arguments
         # cmd_args = parse_args()
         datdir = cmd_args["datdir"]     # required input
@@ -358,6 +348,10 @@ def main(cmd_args):
         after = cmd_args["after"]       # optional, MJD to limit observations
         bliss = cmd_args["bliss"]       # optional, set True if using bliss
         
+        scan_time_dst = time_profile_dst + "DOTParallel/" # PROF_DST
+        dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, append_to_header=datdir, restart=False)
+
+        dp_profiler.add_section("Creating output directories")
 
         # create the output directory if the specified path does not exist
         if not os.path.isdir(outdir):
@@ -371,9 +365,8 @@ def main(cmd_args):
                 obs="obs_UNKNOWN"
         else:
             obs = tag[0]
-        """END - Args + File Management takes 0.0 seconds"""
 
-        """OKAY - Configure logging takes 0.0 seconds"""
+        
         dp_profiler.add_section("Configure Logging")
         # configure the output log file
         logfile=outdir+f'{obs}_out.txt'
@@ -388,18 +381,12 @@ def main(cmd_args):
         
         # file_handler = logging.FileHandler(log_filename) giving permission denied 
         # logfile = f"{os.getcwd()}/{logfile}"
-        logfile = logfile
         DOT.setup_logging(logfile)
         logger = logging.getLogger()
         logging.info("\nExecuting program...")
         logging.info(f"Initial CPU usage for each of the {os.cpu_count()} cores:\n{psutil.cpu_percent(percpu=True)}")
-        """END - Configure logging takes 0.0 seconds"""
 
         # find and get a list of tuples of all the dat files corresponding to each subset of the observation
-        """
-        Dot.get_dats takes <1 second (~.7s)
-        Because of os.walk
-        """
         dats_profiler = profile_manager.start_profiler("proc", "1_DOT.get_dats", scan_time_dst, restart=False)
         dp_profiler.add_section("DOT.get_dats : find and get a list of tuples of all the dat files corresponding to each subset of the observation")
         dats_profiler.add_section("DOT.get_dats")
@@ -417,14 +404,11 @@ def main(cmd_args):
             logging.info("\nNo spatial filtering being applied since sf flag was not toggled on input command.\n")
         dats_profiler.end_and_save_profiler()
         profile_manager.active_profilers.remove(dats_profiler)
-        """END - Dot.get_dats takes <1 second (~.7s)"""
 
-        """ATTENTION - Parallelization is taking all the time - about 3.5 hours"""
         dp_profiler.add_section("Start Parallelization")
         parallel_profiler = profile_manager.start_profiler("proc", "2_parallelization", scan_time_dst, restart=False)
         ndats=len(dat_files)
 
-        """OKAY - takes 0.0 seconds"""
         parallel_profiler.add_section("Get num_processes")
         # Here's where things start to get fancy with parellelization
         if ncore==None: # TODO run with 1 core 
@@ -432,7 +416,6 @@ def main(cmd_args):
         else:
             num_processes = ncore
         logging.info(f"\n{num_processes} cores requested by user for parallel processing.")
-        """OKAY - takes 0.0 seconds"""
 
         parallel_profiler.add_section("Initialize manager for shared variables")
         # Initialize the Manager object for shared variables
@@ -441,36 +424,17 @@ def main(cmd_args):
         proc_count = manager.Value('i', 0)  # Shared integer to track processed count
         # Execute the parallelized function
 
-        """ATTENTION - takes 3+ HOURS"""
         parallel_profiler.add_section("Execute parallelized function")
 
-        # test_nodes = ["LoA.C0544", "LoA.C0736", "LoA.C1120", "LoA.C1312", "LoA.C1504", \
-        #     "LoB.C0352","LoB.C0544", "LoB.C0736"]
-        # todo 
-        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if "LoA.C0352" not in dat_file and "LoB.C1120" not in dat_file and "LoB.C0928" not in dat_file]
-        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if "LoA.C0352" not in dat_file]
-        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files]
-        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files if any(node in dat_file for node in test_nodes)]
-        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files[:2]] # TODO debug
-        """
-        Pool.imap_unordered: Tasks are dynamically allocated to workers as they become available. Once a worker finishes a task, it grabs the next available task from the queue. This ensures all workers stay busy, minimizing idle time, even with uneven runtimes.
-        basically - Dynamic Allocation: Workers don’t get "stuck" with long tasks; they keep pulling tasks as they finish, ensuring efficient use of all CPUs.
-        """
-        # TODO look into blocing 
+        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst) for dat_file in dat_files]
+        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, time_profile_dst) for dat_file in dat_files if any(node in dat_file for node in test_subset)]
+        
         with Pool(num_processes) as pool:
-            # TODO table mess with parallel 
-            # start with 1 core 
-            # check blocking, chunk size 
             results = pool.map(dat_to_dataframe, input_args) # starts -> each process gets a node -> when done with node that process is idle
-            # results = list(pool.imap_unordered(dat_to_dataframe, input_args)) # TODO chunk
-            # auto closes
 
         parallel_profiler.end_and_save_profiler()
         profile_manager.active_profilers.remove(parallel_profiler)
-        """END - Parallelization is taking all the time - about 3.5 hours"""
 
-        # TODO
-        """BREAKS HERE"""
         dp_profiler.add_section("Processing results")
         results_profiler = profile_manager.start_profiler("proc", "3_results", scan_time_dst, restart=False)
         # Process the results as needed
