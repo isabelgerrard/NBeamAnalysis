@@ -132,10 +132,7 @@ def dat_to_dataframe(args):
     start = time.time()
     profile_manager = ProfileManager()
 
-    
     # PROF_DST - avoid using global vairables 
-    # dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
-    # dd_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel"+"/data_to_dataframe/"+node_name+"/"
     dd_time_dst = prof_dst+"DOTParallel/data_to_dataframe/"+node_name+"/"
     dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=False)
 
