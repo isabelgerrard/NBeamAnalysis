@@ -178,14 +178,14 @@ def wf_data(fil,f1,f2):
     # print("\t**in wf_data calling bl.waterfall**", flush=True)
     return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
 
-def wf_blob_data(fil,f1,f2):
-    idx_start, idx_stop = self.get_frequency_indices(f1, f2)
+# def wf_blob_data(fil,f1,f2):
+#     idx_start, idx_stop = self.get_frequency_indices(f1, f2)
 
-    # Define blob dimensions (time, beams, freq range)
-    blob_dim = (self.reader.n_ints_in_file, 1, idx_stop - idx_start)
+#     # Define blob dimensions (time, beams, freq range)
+#     blob_dim = (self.reader.n_ints_in_file, 1, idx_stop - idx_start)
 
-    # Use `read_blob` to extract the data
-    blob = self.reader.read_blob(blob_dim, n_blob=0)
+#     # Use `read_blob` to extract the data
+#     blob = self.reader.read_blob(blob_dim, n_blob=0)
 
 # get the normalization factor of a 2D array
 def ACF(s1):
@@ -210,7 +210,7 @@ def noise_std(data_array,p=5):
 # remove the bottom and top 5th percentile from a data array
 def mid_90(da,p=5):
     return da[(da>np.percentile(da,p))&(da<np.percentile(da,100-p))]
-
+    
 # My method for calculating SNR
 def mySNR(power):
     # get the median of the noise
@@ -233,7 +233,7 @@ def mySNR(power):
         # where N is the number of time bins or rows in the data matrix
         signal=np.median(sorted(signal_els)[-np.shape(power)[0]:])-median_noise 
     # subtract off the median (previous step) and divide by the standard deviation to get the SNR
-    SNR=signal/std_noise
+    SNR = signal/std_noise
     return SNR
 
 # extract index and dataframe from pickle files to resume from last checkpoint
@@ -246,8 +246,6 @@ def resume(pickle_file, df):
         logging.info(f'\t***pickle checkpoint file found. Resuming from step {index+1}\n')
     return index, df
 
-# def get_corr(s0, s1):
-#     return sig_cor(s0-noise_median(s0),s1-noise_median(s1))
 
 # comb through each hit in the dataframe and look for corresponding hits in each of the beams.
 # def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4):
@@ -290,12 +288,6 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     tsamp = fil_meta.header['tsamp']    # time bin length in seconds
     obs_length=fil_meta.n_ints_in_file * tsamp # total length of observation in seconds
 
-    # """
-    # Also would it be faster to read in the waterfall for the entire range ONCE and then access that by frequency ranges
-    # so not READING in waterfall with EACH range ?
-    # """
-    # target_wf = get_wf(target_fil)
-
     # # get a list of all the other fil files for all the other beams
     other_cols = first_row.loc[first_row.index.str.startswith('fil_') & (first_row.index != matching_col)]
     # # iteritems is deprecated, also don't use colname 
@@ -303,7 +295,6 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     other_fils = other_cols.values # this is index object - can use tolist()
     # other_wfs_full = [get_wf(other_fil) for other_fil in other_fils]
 
-    # print(other_fils)
     beam_codes = [get_beam_code(fil) for fil in other_fils]
     col_name_corrs=[f'corrs_{beam}' for beam in beam_codes] # TODO this is always 0001 ?
     col_name_SNRr=[f'SNR_ratio_{beam}' for beam in beam_codes]
@@ -314,11 +305,9 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     num_rows = len(df)
     for r,row in df.iterrows(): # each hit
         if r%200==0: print(f"\t[{proc_count}] [{node_name}] [{fil_name}] {r}/{num_rows}") # TODO for debug only 
-        # print(row) # TODO a single row is a formatted single string of multiple columns? :/
         if resume_index is not None and r < resume_index:
-            # print(resume_index)
             continue  # skip rows before the resume index
-       
+
         # calculate the narrow signal window using the reported drift rate and metadata
         DR = row['Drift_Rate']              # reported drift rate
         padding=1+np.log10(row['SNR'])/10   # padding based on reported strength of signal
@@ -333,14 +322,6 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         f1=round(max(fmid-half_span*1e-6,minimum_frequency),6)
         f2=round(min(fmid+half_span*1e-6,maximum_frequency),6)
 
-        # if fmid-half_span*1e-6 < minimum_frequency:
-        #     print(f"setting to minimum {minimum_frequency}\n{fmid-half_span*1e-6} --> {f1}")
-        # if fmid+half_span*1e-6 > maximum_frequency:
-        #     print(f"setting to maximum {maximum_frequency}\n{fmid+half_span*1e-6} --> {f2}")
-        # grab the signal data in the target beam fil file
-        """
-        ATTENTION - this calls wf_data which takes .5s and about 1000 calls but seems like calling waterfall twice?
-        """
         # now set f_start and f_stop of the waterfall and call read_data 
         # then grab data for frange,s0
         frange,s0=wf_data(target_fil,f1,f2) # bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
@@ -348,21 +329,17 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         
         # calculate the SNR
         SNR0 = mySNR(s0)
+        
         # get a list of all the other fil files for all the other beams
         # other_cols = row.loc[row.index.str.startswith('fil_') & (row.index != matching_col)]
         # initialize empty lists for appending
-        # xs=[] # no longer used
         corrs=[]
         mySNRs=[SNR0]
         SNR_ratios=[]
-        # for col_name, other_fil in other_cols.iteritems():
-        # for col_name, other_fil in other_cols.items(): #iteritems deprecated
         for other_fil in other_fils: #iteritems deprecated
-        # for other_wf in other_wfs_full: #iteritems deprecated
             # grab the signal data from the non-target fil in the same location
             _,s1=wf_data(other_fil,f1,f2)
             # just grabbing data in that range without completely reloading wf again
-            # _,s1=wf_data_range(other_wf,f1,f2)
             # calculate and append the SNR for the same location in the other beam
             off_SNR = mySNR(s1)
             mySNRs.append(off_SNR)
@@ -370,33 +347,20 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
             SNR_ratios.append(SNR0/off_SNR)
             # calculate and append the correlation score
             corrs.append(sig_cor(s0-noise_median(s0),s1-noise_median(s1)))
-            # x scores no longer used
-            # xs.append(min(corrs[-1]/(SNR_ratios[-1]/sf),1.0)) 
 
-        # add the correlation scores, SNRs and SNR-ratios to the dataframe
-        # TODO not doing anything with SNR ratio value her e- can be vectorized
-        """Vectorize""" 
-        # corrs and SNR_ratios have same dimensions
         df.loc[r,col_name_corrs] = corrs
         df.loc[r,col_name_SNRr] = SNR_ratios
-        # for i,x in enumerate(SNR_ratios): # TODO SNR_RATIOS is always shape 1?
-            # print("\n Entering SNR_ratios loop")
-            # col_name_corrs='corrs_'+other_cols[i].split('beam')[-1].split('.')[0] # TODO this is always 0001 ?
-            # df.loc[r,col_name_corrs] = corrs[i]
-            # col_name_SNRr='SNR_ratio_'+other_cols[i].split('beam')[-1].split('.')[0]
-            # df.loc[r,col_name_SNRr] = SNR_ratios[i]
-            # col_name_x = 'x_'+other_cols[i].split('beam')[-1].split('.')[0]
-            # df.loc[r,col_name_x] = x
         df.loc[r,'mySNRs'] = str(mySNRs)
+
         # calculate and add average values to the dataframe (useful for N>2 beams)
         if len(SNR_ratios)>0:
             df.loc[r,'corrs'] = sum(corrs)/len(corrs) 
             df.loc[r,'SNR_ratio'] = sum(SNR_ratios)/len(SNR_ratios)  
-            # df.loc[r,'x'] = sum(xs)/len(xs)                          
         # pickle the dataframe and row index for resuming
         if not pickle_off:
             with open(outdir+f'{obs}_comb_df.pkl', 'wb') as f:
-                pickle.dump((r, df), f) 
+                pickle.dump((r, df), f)
+    
     # remove the pickle checkpoint file after all loops complete
     if os.path.exists(outdir+f"{obs}_comb_df.pkl"):
         os.remove(outdir+f"{obs}_comb_df.pkl") 
