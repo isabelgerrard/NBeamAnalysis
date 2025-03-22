@@ -15,6 +15,7 @@ import blimpy as bl
 # print(bl.__file__)
 import logging
 from pathlib import Path
+from numba import jit
 
 # hdf_reader.examine_h5(None)
 # logging function
@@ -79,20 +80,6 @@ def get_specific_logger(logfile):
         # root_logger.addHandler(file_handler)
 
     return specific_logger
-
-# def get_specific_logger(logfile):
-#     """
-#     Returns logger associated with logfile or creates it / the root if it/they do not exist.
-#     """
-#     try:
-#         logger = logging.getLogger(logfile)
-#     except:
-#         # TODO this should be checking for the specific exception type
-#         _setup_another_logger(logfile)
-#         logger = logging.getLogger(logfile)
-#         logger = logging.Handl
-#     return logger
-
 
 # elapsed time function
 def get_elapsed_time(start=0):
@@ -176,7 +163,11 @@ def load_dat_df(dat_file,filtuple):
 """ATTENTION - this takes .5 sec about 1300 calls"""
 def wf_data(fil,f1,f2):
     # print("\t**in wf_data calling bl.waterfall**", flush=True)
-    return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
+    # return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
+    wat = bl.Waterfall(fil,f1,f2)
+    print(f"time: ({wat.container.t_start}, {wat.container.t_stop})")
+    print(f"chan: ({wat.container.chan_start_idx}, {wat.container.chan_stop_idx})")
+    return wat.grab_data(f1,f2)
 
 # def wf_blob_data(fil,f1,f2):
 #     idx_start, idx_stop = self.get_frequency_indices(f1, f2)
@@ -188,10 +179,12 @@ def wf_data(fil,f1,f2):
 #     blob = self.reader.read_blob(blob_dim, n_blob=0)
 
 # get the normalization factor of a 2D array
+@jit(nopython=True) # should be automatic for vectorized multi dim
 def ACF(s1):
     return ((s1*s1).sum(axis=1)).sum()/np.shape(s1)[0]/np.shape(s1)[1]
 
 # correlate two 2D arrays with a dot product and return the correlation score
+@jit(nopython=True)
 def sig_cor(s1,s2):
     ACF1=ACF(s1)
     ACF2=ACF(s2)
@@ -200,18 +193,41 @@ def sig_cor(s1,s2):
     return x
 
 # get the median of the "noise" after removing the bottom and top 5th percentile of data
+@jit(nopython=True)
 def noise_median(data_array,p=5):
     return np.median(mid_90(data_array,p))
 
 # get the standard deviation of the "noise" after removing the bottom and top 5th percentile of data
+@jit(nopython=True)
 def noise_std(data_array,p=5):
     return np.std(mid_90(data_array,p))
 
 # remove the bottom and top 5th percentile from a data array
+@jit(nopython=True)
 def mid_90(da,p=5):
-    return da[(da>np.percentile(da,p))&(da<np.percentile(da,100-p))]
-    
+    # return da[(da>np.percentile(da,p))&(da<np.percentile(da,100-p))]
+    # jit compatible
+    lower, upper = np.percentile(da,p), np.percentile(da,100-p)
+    filtered_values = []
+    for x in da.ravel():  # Loop over flattened array
+        if lower < x < upper:
+            filtered_values.append(x)
+    return np.array(filtered_values, dtype=da.dtype)
+
+# identify signals significantly above the "noise" in the data
+@jit(nopython=True)
+def signals_sig_above_noise(power, std_noise):
+    # power[(power>10*std_noise)&(power>np.percentile(power,95))] 
+    percentile_95 = np.percentile(power, 95)
+    threshold = 10 * std_noise
+    filtered_values = []
+    for x in power.ravel():  # Loop over flattened array
+        if x > threshold and x > percentile_95:
+            filtered_values.append(x)
+    return np.array(filtered_values, dtype=power.dtype)
+
 # My method for calculating SNR
+@jit(nopython=True)
 def mySNR(power):
     # get the median of the noise
     median_noise=noise_median(power)
@@ -223,7 +239,8 @@ def mySNR(power):
     # get the standard deviation of the noise using median instead of mean
     std_noise=np.sqrt(np.median((zeroed_noise)**2))
     # identify signals significantly above the "noise" in the data
-    signal_els=power[(power>10*std_noise)&(power>np.percentile(power,95))] 
+    # signal_els=power[(power>10*std_noise)&(power>np.percentile(power,95))] 
+    signal_els = signals_sig_above_noise(power, std_noise)
     if not bool(signal_els.size):
         # if there are no "signals" popping out above the noise
         # this will result in an SNR of 1
@@ -231,7 +248,8 @@ def mySNR(power):
     else:
         # the signal is calculated as the median of the highest N elements in the signal candidates
         # where N is the number of time bins or rows in the data matrix
-        signal=np.median(sorted(signal_els)[-np.shape(power)[0]:])-median_noise 
+        # signal=np.median(sorted(signal_els)[-np.shape(power)[0]:])-median_noise 
+        signal=np.median(np.sort(signal_els)[-np.shape(power)[0]:])-median_noise # jit compatible - sorted makes python list
     # subtract off the median (previous step) and divide by the standard deviation to get the SNR
     SNR = signal/std_noise
     return SNR
@@ -284,6 +302,8 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     # determine the frequency boundaries in the .fil file
     minimum_frequency = fil_meta.container.f_start
     maximum_frequency = fil_meta.container.f_stop
+    print(f"time: ({fil_meta.container.t_start}, {fil_meta.container.t_stop})")
+    print(f"chan: ({fil_meta.container.chan_start_idx}, {fil_meta.container.chan_stop_idx})")
     # calculate the narrow signal window using the reported drift rate and metadata
     tsamp = fil_meta.header['tsamp']    # time bin length in seconds
     obs_length=fil_meta.n_ints_in_file * tsamp # total length of observation in seconds
