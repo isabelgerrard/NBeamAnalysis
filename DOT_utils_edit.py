@@ -16,6 +16,7 @@ import blimpy as bl
 import logging
 from pathlib import Path
 from numba import jit
+import shutil
 
 # hdf_reader.examine_h5(None)
 # logging function
@@ -118,12 +119,11 @@ def get_dats(root_dir,beam,bliss):
     where each file corresponds to the target beam."""
     errors=0
     dat_files = []
+    if bliss: # print only once
+        print("Logging disabled (likely for functionality between bliss and NBeamAnalysis), see also edit to get_dats")
+    print("Walking through root_dir searching for dat files...")
+    
     for dirpath, dirnames, filenames in os.walk(root_dir):
-        # if 'test' in dirpath:
-        #     print(f'Skipping "test" folder:\n{dirpath}')
-        #     continue
-        if bliss: # print only once
-            print("Logging disabled (likely for functionality between bliss and NBeamAnalysis), see also edit to get_dats")
         for f in filenames:
             if f.endswith('.dat') and f.split('beam')[-1].split('.')[0]==beam:
                 if not bliss: # currently bliss does not have log files
@@ -162,21 +162,7 @@ def load_dat_df(dat_file,filtuple):
 # use blimpy to grab the data slice from the filterbank file over the frequency range provided
 """ATTENTION - this takes .5 sec about 1300 calls"""
 def wf_data(fil,f1,f2):
-    # print("\t**in wf_data calling bl.waterfall**", flush=True)
-    # return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
-    wat = bl.Waterfall(fil,f1,f2)
-    print(f"time: ({wat.container.t_start}, {wat.container.t_stop})")
-    print(f"chan: ({wat.container.chan_start_idx}, {wat.container.chan_stop_idx})")
-    return wat.grab_data(f1,f2)
-
-# def wf_blob_data(fil,f1,f2):
-#     idx_start, idx_stop = self.get_frequency_indices(f1, f2)
-
-#     # Define blob dimensions (time, beams, freq range)
-#     blob_dim = (self.reader.n_ints_in_file, 1, idx_stop - idx_start)
-
-#     # Use `read_blob` to extract the data
-#     blob = self.reader.read_blob(blob_dim, n_blob=0)
+    return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
 
 # get the normalization factor of a 2D array
 @jit(nopython=True) # should be automatic for vectorized multi dim
@@ -254,6 +240,9 @@ def mySNR(power):
     SNR = signal/std_noise
     return SNR
 
+def cleanup_tmp_buf(tmp_fil_loc):
+    os.remove(tmp_fil_loc)
+
 # extract index and dataframe from pickle files to resume from last checkpoint
 def resume(pickle_file, df):
     index = 0 # initialize at 0
@@ -264,10 +253,9 @@ def resume(pickle_file, df):
         logging.info(f'\t***pickle checkpoint file found. Resuming from step {index+1}\n')
     return index, df
 
-
 # comb through each hit in the dataframe and look for corresponding hits in each of the beams.
 # def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4):
-def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4, proc_count=0): # TODO debug only
+def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4, proc_count=0, tmp_loc=None): # TODO debug only
     if sf==None:
         sf=4
     """
@@ -280,46 +268,41 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     first_row = df.iloc[0]
     matching_col = first_row.filter(like='fil_').apply(lambda x: x == first_row['dat_name']).idxmax()
     target_fil = first_row[matching_col]
-
-    """
-    Access process specific log file so can write within its process wihtout needing to synchronize
-    """
+    
     node_name = first_row['dat_name'].split("/")[-2]
     # TODO doens't apply to other nbeam users
     fil_name = first_row['dat_name'].split("/")[-1][10:15] # scan identifier
+    if tmp_loc is not None:
+        target_fil = os.path.join(tmp_loc, os.path.basename(target_fil))
+        # print(f"Setting `target_fil` to and Loading from {target_fil}")
+
     logfile=outdir+f'/{node_name}_out.txt'
     curr_proc_logger = get_specific_logger(logfile)
 
     try:
         print(f"[{node_name}] fetching meta for {target_fil}")
-        # curr_proc_logger.info(f"fetching meta for {target_fil}")
         fil_meta = bl.Waterfall(target_fil,load_data=False)
     except Exception as e:
         curr_proc_logger.warning(f"Failed to load fil meta with bl.Waterfall for {target_fil} - skipping this node...")
         curr_proc_logger.info(e)
         return
     
-    # determine the frequency boundaries in the .fil file
+    ## determine the frequency boundaries in the .fil file
     minimum_frequency = fil_meta.container.f_start
     maximum_frequency = fil_meta.container.f_stop
-    print(f"time: ({fil_meta.container.t_start}, {fil_meta.container.t_stop})")
-    print(f"chan: ({fil_meta.container.chan_start_idx}, {fil_meta.container.chan_stop_idx})")
-    # calculate the narrow signal window using the reported drift rate and metadata
+    ## calculate the narrow signal window using the reported drift rate and metadata
     tsamp = fil_meta.header['tsamp']    # time bin length in seconds
     obs_length=fil_meta.n_ints_in_file * tsamp # total length of observation in seconds
 
-    # # get a list of all the other fil files for all the other beams
+    ## get a list of all the other fil files for all the other beams
     other_cols = first_row.loc[first_row.index.str.startswith('fil_') & (first_row.index != matching_col)]
-    # # iteritems is deprecated, also don't use colname 
-    # # for col_name, other_fil in other_cols.iteritems():
     other_fils = other_cols.values # this is index object - can use tolist()
-    # other_wfs_full = [get_wf(other_fil) for other_fil in other_fils]
+    if tmp_loc is not None:
+        other_fils = [os.path.join(tmp_loc, os.path.basename(other_fil)) for other_fil in other_fils]
 
     beam_codes = [get_beam_code(fil) for fil in other_fils]
     col_name_corrs=[f'corrs_{beam}' for beam in beam_codes] # TODO this is always 0001 ?
     col_name_SNRr=[f'SNR_ratio_{beam}' for beam in beam_codes]
-
-    # this is pointer to those waterfall objects 
 
     print(f"[{node_name}] Beginning loop through hits...\n")
     num_rows = len(df)
@@ -328,45 +311,47 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         if resume_index is not None and r < resume_index:
             continue  # skip rows before the resume index
 
-        # calculate the narrow signal window using the reported drift rate and metadata
+        ## calculate the narrow signal window using the reported drift rate and metadata
         DR = row['Drift_Rate']              # reported drift rate
         padding=1+np.log10(row['SNR'])/10   # padding based on reported strength of signal
-        # calculate the amount of frequency drift with some padding
+        ## calculate the amount of frequency drift with some padding
         half_span=abs(DR)*obs_length*padding  
         if half_span<250:
             half_span=250 # minimum 500 Hz span window
         fmid = row['Corrected_Frequency']
-        # signal may not be centered, could drift up or down in frequency space
-        # so the frequency drift is added to both sides of the central frequency
-        # to ensure it is contained within the window
+        ## signal may not be centered, could drift up or down in frequency space
+        ## so the frequency drift is added to both sides of the central frequency
+        ## to ensure it is contained within the window
         f1=round(max(fmid-half_span*1e-6,minimum_frequency),6)
         f2=round(min(fmid+half_span*1e-6,maximum_frequency),6)
 
-        # now set f_start and f_stop of the waterfall and call read_data 
-        # then grab data for frange,s0
+        ## now set f_start and f_stop of the waterfall and call read_data 
+        ## then grab data for frange,s0
+        # frange,s0=wf_data(target_fil,f1,f2) # bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
         frange,s0=wf_data(target_fil,f1,f2) # bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
-        # frange,s0=wf_data_range(target_wf_full, f1,f2) # bl.Waterfall(fil).grab_data(f1,f2)
         
-        # calculate the SNR
+        ## calculate the SNR
         SNR0 = mySNR(s0)
         
-        # get a list of all the other fil files for all the other beams
-        # other_cols = row.loc[row.index.str.startswith('fil_') & (row.index != matching_col)]
-        # initialize empty lists for appending
+        ## get a list of all the other fil files for all the other beams
+        ## other_cols = row.loc[row.index.str.startswith('fil_') & (row.index != matching_col)]
+        ## initialize empty lists for appending
         corrs=[]
         mySNRs=[SNR0]
         SNR_ratios=[]
         for other_fil in other_fils: #iteritems deprecated
-            # grab the signal data from the non-target fil in the same location
+            ## grab the signal data from the non-target fil in the same location
             _,s1=wf_data(other_fil,f1,f2)
-            # just grabbing data in that range without completely reloading wf again
-            # calculate and append the SNR for the same location in the other beam
+            ## just grabbing data in that range without completely reloading wf again
+            ## calculate and append the SNR for the same location in the other beam
             off_SNR = mySNR(s1)
             mySNRs.append(off_SNR)
-            # calculate and append the SNR ratio
+            ## calculate and append the SNR ratio
             SNR_ratios.append(SNR0/off_SNR)
-            # calculate and append the correlation score
+            ## calculate and append the correlation score
             corrs.append(sig_cor(s0-noise_median(s0),s1-noise_median(s1)))
+            if tmp_loc is not None:
+                cleanup_tmp_buf(other_fil)
 
         df.loc[r,col_name_corrs] = corrs
         df.loc[r,col_name_SNRr] = SNR_ratios
@@ -381,6 +366,10 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
             with open(outdir+f'{obs}_comb_df.pkl', 'wb') as f:
                 pickle.dump((r, df), f)
     
+    # Done with this scan (both beams) can remove from temporary buf location 
+    if tmp_loc is not None:
+        cleanup_tmp_buf(target_fil)
+
     # remove the pickle checkpoint file after all loops complete
     if os.path.exists(outdir+f"{obs}_comb_df.pkl"):
         os.remove(outdir+f"{obs}_comb_df.pkl") 

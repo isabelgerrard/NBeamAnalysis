@@ -32,6 +32,7 @@ import argparse
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.ticker import ScalarFormatter
+import shutil
 
 # import DOT_utils as DOT
 # sys.path.append("./NBeamAnalysis")
@@ -121,32 +122,32 @@ def check_cmd_args(args):
     # Returns the input argument as a labeled array
     return odict
 
-    # dat processing function for parallelization.
-# perform cross-correlation to pare down the list of hits if flagged with sf, 
-# and put the remaining hits into a dataframe.
+def move_to_tmp_buf(og_fil_loc, sub_identifier):
+    ## Temporarily copy to buf0 to make i/o faster 
+    tmp_loc_base_dir = os.path.join(r"/mnt/buf0/NBeamAnalysisTMP/", sub_identifier)
+    if not os.path.exists(tmp_loc_base_dir):
+        os.makedirs(tmp_loc_base_dir, exist_ok=True)
+    # temporary_fil_dst = os.path.join(tmp_loc_base_dir, os.path.basename(og_fil_loc))
+    tmp_fil_dst = os.path.join(tmp_loc_base_dir, os.path.basename(og_fil_loc))
+    logging.info(f"Temporarily copying {og_fil_loc} to {tmp_fil_dst} ...")
+    shutil.copy(og_fil_loc, tmp_loc_base_dir)
+    return tmp_fil_dst, tmp_loc_base_dir
+
+## dat processing function for parallelization.
+## perform cross-correlation to pare down the list of hits if flagged with sf, 
+## and put the remaining hits into a dataframe.
 def dat_to_dataframe(args):
     # dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
     dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst = args
     dat_name = "/".join(dat.split("/")[-2:])
     node_name = dat.split("/")[-2]
+    identifier = rf"{node_name}/{dat}"
     start = time.time()
     profile_manager = ProfileManager()
 
     # PROF_DST - avoid using global vairables 
-    dd_time_dst = prof_dst+"DOTParallel/data_to_dataframe/"+node_name+"/"
+    dd_time_dst = prof_dst+"DOTParallel/data_to_dataframe/"+identifier+"/"
     dataframe_profiler = profile_manager.start_profiler("proc", "1_dat_to_dataframe", dd_time_dst, restart=False)
-
-    """ATTENTION - 0.0, 132m, 136m, 76m, 64m, 84m, 125m, 190m, 75m, 0.0, 3m, 69m, 38m
-    """
-
-    """ TODO 
-    Lock is only meant to synchronized shared resources, which is just the proc_count.
-    The string manipulations and logging does not need to be locked but doesnt get done because waiting for the lock to update proc_count.
-    Save proc_count locally !"""
-
-    """ TODO 
-    writing to same log file also could be requiring synchronization
-    """
 
     dataframe_profiler.add_section("with count_lock")
     count_lock_profiler = profile_manager.start_profiler("proc", "2_with_count_lock", dd_time_dst, restart=False)
@@ -160,7 +161,7 @@ def dat_to_dataframe(args):
         """
         Different log file per process so don't need to lock
         """
-        logfile=outdir+f'/{node_name}_out.txt'
+        logfile=outdir+f'/{identifier}_out.txt'
         curr_proc_logger = DOT.get_specific_logger(logfile)
         """
         okay what is all the reading was in lock for now but combing through is parallelized because this takes no time anyway
@@ -194,20 +195,21 @@ def dat_to_dataframe(args):
         """
         glob.glob is a read so doesnt need to be synchronized inside lock if not being written to
         """
-        fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*fil'))
+        fils_base = fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]
+        fils=sorted(glob.glob(fils_base+'????*fil'))
 
         if not fils:
             print("No fil files. Looking for fbh5/h5 instead.")
             # TODO this step is taking a while - probs because using sorting
             # also pretty sure the sorting is doing something weird anyway
             count_lock_profiler.add_section("If not fils - Sorting subdirectories again ?")
-            fils=sorted(glob.glob(fildir+subdirectories+os.path.basename(os.path.splitext(dat)[0])[:-4]+'????*h5'))
+            fils=sorted(glob.glob(fils_base+'????*h5'))
         """
         not even globbing after this. just the load_dat_df
         """
         if not fils:
-            count_lock_profiler.add_section("Skipping because could not locate filterbank files ?")
-            curr_proc_logger.info(f'\tWARNING! Could not locate filterbank files in:\n\t{fildir+dat.split(datdir)[-1].split(dat.split("/")[-1])[0]}')
+            count_lock_profiler.add_section(f"Skipping because could not locate filterbank files in {fils_base}?")
+            curr_proc_logger.info(f'\tWARNING! Could not locate filterbank files in:\n\t{fils_base}')
             curr_proc_logger.info(f'\tSkipping...\n')
             skipped+=1
             mid, time_label = DOT.get_elapsed_time(start)
@@ -224,11 +226,19 @@ def dat_to_dataframe(args):
         profile_manager.active_profilers.remove(count_lock_profiler)
         """END - ATTENTION"""
 
-        # make a dataframe containing all the hits from all the dat files in the tuple and sort them by frequency
-        #  """OKAY - load_dat_sf takes 0.0 seconds"""
+        ## make a dataframe containing all the hits from all the dat files in the tuple and sort them by frequency
         dataframe_profiler.add_section("DOT.load_dat_df")
         load_dat_profiler = profile_manager.start_profiler("proc", "3_load_dat_df", dd_time_dst, restart=False)
         load_dat_profiler.add_section("DOT.load_dat_df")
+        
+        # get specific substructure of this fil
+        sub_identifier = os.path.dirname(dat)
+        slash_offset = 1 if sub_identifier[-1] == r"/" else 0 # or else throws is a directory error
+        sub_identifier = sub_identifier[len(datdir)+slash_offset:]
+        for i, fil_file in enumerate(fils):
+            new_tmp_loc, tmp_base = move_to_tmp_buf(fil_file, sub_identifier)
+            fils[i] = new_tmp_loc # now reference copy
+        
         df0 = DOT.load_dat_df(dat,fils)
         print("\n\t**RELEASING LOCK**\n")
         
@@ -248,9 +258,7 @@ def dat_to_dataframe(args):
         return pd.DataFrame(),hits,skipped,exact_matches
     load_dat_profiler.end_and_save_profiler()
     profile_manager.active_profilers.remove(load_dat_profiler)
-    """END - load_dat_sf takes 0.0 seconds"""
 
-    """ATTENTION - Takes 1.5 min per NODE, 5s, 3s, 7s, 8s, 7s, 0, 0, 0, 1, 0, 0, 14, 1, 0, 0"""
     sf_profiler = profile_manager.start_profiler("proc", "4_sf", dd_time_dst, restart=False)
     dataframe_profiler.add_section("Apply spatial filtering if turned on with sf flag")
     # apply spatial filtering if turned on with sf flag (default is off)
@@ -297,7 +305,7 @@ def dat_to_dataframe(args):
         comb_profiler.add_section(f"\tCombing through the remaining {len(df)} hits.")
         curr_proc_logger.info(f"\tCombing through the remaining {len(df)} hits.\n")
         # print(np.shape(df))
-        temp_df = DOT.comb_df(df,outdir,obs,pickle_off=True,sf=sf, proc_count=curr_proc_count)
+        temp_df = DOT.comb_df(df,outdir,obs,pickle_off=True,sf=sf, proc_count=curr_proc_count, tmp_loc=tmp_base)
         """dot.comb_df only reads from passed in dataframe except if pickles but here pickle_off is set to true so fine to not be locked. 
         if it was then it could be returned and then saved to pickle with the lock"""
         comb_df_profiler.end_and_save_profiler()
