@@ -102,7 +102,7 @@ def check_logs(log, bliss=False):
         return status
     else:
         if not os.path.exists(log):
-            logging.info("Can't find log file...")
+            # logging.info("Can't find log file...")
             return "incomplete"
         searchfile = open(log,'r').readlines()
         if searchfile[-1]!='===== END OF LOG\n':
@@ -121,7 +121,7 @@ def get_dats(root_dir,beam,bliss):
     dat_files = []
     if bliss: # print only once
         print("Logging disabled (likely for functionality between bliss and NBeamAnalysis), see also edit to get_dats")
-    print("Walking through root_dir searching for dat files...")
+    print(f"Walking through root_dir {root_dir} searching for dat files...")
     
     for dirpath, dirnames, filenames in os.walk(root_dir):
         for f in filenames:
@@ -129,7 +129,7 @@ def get_dats(root_dir,beam,bliss):
                 if not bliss: # currently bliss does not have log files
                     log_file = os.path.join(dirpath, f).replace('.dat','.log')
                     if check_logs(log_file, bliss=bliss)=="incomplete": #or not os.path.isfile(log_file): <---- this is the edit to get_dats()
-                        logging.info(f"{log_file} is incomplete. Please check it. Skipping this file...")
+                        # logging.info(f"{log_file} is incomplete. Please check it. Skipping this file...")
                         errors+=1
                         continue
                 dat_files.append(os.path.join(dirpath, f))
@@ -250,7 +250,7 @@ def resume(pickle_file, df):
         # If a checkpoint file exists, load the dataframe and row index from the file
         with open(pickle_file, "rb") as f:
             index, df = pickle.load(f)
-        logging.info(f'\t***pickle checkpoint file found. Resuming from step {index+1}\n')
+        # logging.info(f'\t***pickle checkpoint file found. Resuming from step {index+1}\n')
     return index, df
 
 # comb through each hit in the dataframe and look for corresponding hits in each of the beams.
@@ -263,7 +263,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     Don't recalc metadata constants for each hit
     """
 
-    print("in DOT_utils_edit")
+    print(f"[{proc_count}] in DOT_utils_edit.comb_df")
     # identify the target beam .fil file
     first_row = df.iloc[0]
     matching_col = first_row.filter(like='fil_').apply(lambda x: x == first_row['dat_name']).idxmax()
@@ -276,11 +276,12 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         target_fil = os.path.join(tmp_loc, os.path.basename(target_fil))
         # print(f"Setting `target_fil` to and Loading from {target_fil}")
 
-    logfile=outdir+f'/{node_name}_out.txt'
-    curr_proc_logger = get_specific_logger(logfile)
+    # logfile=outdir+f'/{node_name}_out.txt'
+    # curr_proc_logger = get_specific_logger(logfile)
+    curr_proc_logger = logging.getLogger(f'worker_{proc_count}')
 
     try:
-        print(f"[{node_name}] fetching meta for {target_fil}")
+        print(f"[{proc_count}] [{node_name}] fetching meta for {target_fil}")
         fil_meta = bl.Waterfall(target_fil,load_data=False)
     except Exception as e:
         curr_proc_logger.warning(f"Failed to load fil meta with bl.Waterfall for {target_fil} - skipping this node...")
@@ -304,7 +305,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     col_name_corrs=[f'corrs_{beam}' for beam in beam_codes] # TODO this is always 0001 ?
     col_name_SNRr=[f'SNR_ratio_{beam}' for beam in beam_codes]
 
-    print(f"[{node_name}] Beginning loop through hits...\n")
+    print(f"[{proc_count}] [{node_name}] Beginning loop through hits...\n")
     num_rows = len(df)
     for r,row in df.iterrows(): # each hit
         if r%200==0: print(f"\t[{proc_count}] [{node_name}] [{fil_name}] {r}/{num_rows}") # TODO for debug only 
@@ -350,27 +351,27 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
             SNR_ratios.append(SNR0/off_SNR)
             ## calculate and append the correlation score
             corrs.append(sig_cor(s0-noise_median(s0),s1-noise_median(s1)))
-            if tmp_loc is not None:
-                cleanup_tmp_buf(other_fil)
 
         df.loc[r,col_name_corrs] = corrs
         df.loc[r,col_name_SNRr] = SNR_ratios
         df.loc[r,'mySNRs'] = str(mySNRs)
 
-        # calculate and add average values to the dataframe (useful for N>2 beams)
+        ## calculate and add average values to the dataframe (useful for N>2 beams)
         if len(SNR_ratios)>0:
             df.loc[r,'corrs'] = sum(corrs)/len(corrs) 
             df.loc[r,'SNR_ratio'] = sum(SNR_ratios)/len(SNR_ratios)  
-        # pickle the dataframe and row index for resuming
+        ## pickle the dataframe and row index for resuming
         if not pickle_off:
             with open(outdir+f'{obs}_comb_df.pkl', 'wb') as f:
                 pickle.dump((r, df), f)
     
-    # Done with this scan (both beams) can remove from temporary buf location 
+    ## Done with this scan (both beams) can remove from temporary buf location 
     if tmp_loc is not None:
         cleanup_tmp_buf(target_fil)
+        for other_fil in other_fils:
+            cleanup_tmp_buf(other_fil)
 
-    # remove the pickle checkpoint file after all loops complete
+    ## remove the pickle checkpoint file after all loops complete
     if os.path.exists(outdir+f"{obs}_comb_df.pkl"):
         os.remove(outdir+f"{obs}_comb_df.pkl") 
     return df
@@ -378,7 +379,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
 # cross reference hits in the target beam dat with the other beams dats for identical signals
 def cross_ref(input_df,sf):
     if len(input_df)==0:
-        logging.info("\tNo hits in the input dataframe to cross reference.")
+        # logging.info("\tNo hits in the input dataframe to cross reference.")
         return input_df
     # first, make sure the indices are reset
     input_df=input_df.reset_index(drop=True)
@@ -425,7 +426,7 @@ def cross_ref(input_df,sf):
 # not complete or implemented anywhere
 def drop_fscrunch_duplicates(input_df,frez=1,time_rez=16):
     if len(input_df)==0:
-        logging.info("\tNo hits in the input dataframe to cross reference.")
+        # logging.info("\tNo hits in the input dataframe to cross reference.")
         return input_df
     # first, make sure the indices are reset
     input_df=input_df.reset_index(drop=True)
