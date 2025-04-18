@@ -305,7 +305,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     col_name_corrs=[f'corrs_{beam}' for beam in beam_codes] # TODO this is always 0001 ?
     col_name_SNRr=[f'SNR_ratio_{beam}' for beam in beam_codes]
 
-    print(f"[{proc_count}] [{node_name}] Beginning loop through hits...\n")
+    print(f"[{proc_count}] [{node_name}] [{fil_name}] Beginning loop through hits...\n")
     num_rows = len(df)
     for r,row in df.iterrows(): # each hit
         if r%200==0: print(f"\t[{proc_count}] [{node_name}] [{fil_name}] {r}/{num_rows}") # TODO for debug only 
