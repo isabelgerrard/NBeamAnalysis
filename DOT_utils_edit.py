@@ -268,12 +268,15 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     first_row = df.iloc[0]
     matching_col = first_row.filter(like='fil_').apply(lambda x: x == first_row['dat_name']).idxmax()
     target_fil = first_row[matching_col]
+    print(f"{target_fil=}")
     
     node_name = first_row['dat_name'].split("/")[-2]
     # TODO doens't apply to other nbeam users
     fil_name = first_row['dat_name'].split("/")[-1][10:15] # scan identifier
     if tmp_loc is not None:
         target_fil = os.path.join(tmp_loc, os.path.basename(target_fil))
+        print("tmp_loc is not None")
+        print(f"{target_fil=}")
         # print(f"Setting `target_fil` to and Loading from {target_fil}")
 
     # logfile=outdir+f'/{node_name}_out.txt'
@@ -367,8 +370,10 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     
     ## Done with this scan (both beams) can remove from temporary buf location 
     if tmp_loc is not None:
+        print("tmp_loc is not None now cleaning up supposedly")
         cleanup_tmp_buf(target_fil)
         for other_fil in other_fils:
+            print(f"Cleaning up {other_fil}")
             cleanup_tmp_buf(other_fil)
 
     ## remove the pickle checkpoint file after all loops complete
