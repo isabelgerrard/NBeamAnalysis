@@ -9,14 +9,10 @@ import time
 import os
 import glob
 import argparse
-import sys
-sys.path.append('/mnt/primary/scratch/igerrard/ASP/blimpy')
 import blimpy as bl
-# import blimpy as bl
-# from blimpy.io import hdf_reader
 import logging
+import sys
 
-# hdf_reader.examine_h5(None)
 # logging function
 def setup_logging(log_filename):
     # Import the logging module and configure the root logger
@@ -81,11 +77,11 @@ def get_dats(root_dir,beam,bliss):
         # if 'test' in dirpath:
         #     print(f'Skipping "test" folder:\n{dirpath}')
         #     continue
-        if bliss: # print only once
-            print("Logging disabled (likely for functionality between bliss and NBeamAnalysis), see also edit to get_dats")
+        if bliss:
+            print("Logging disabled (likely for functionality between bliss andd NBeamAnalysis), see also edit to get_dats")
         for f in filenames:
             if f.endswith('.dat') and f.split('beam')[-1].split('.')[0]==beam:
-                if not bliss: # currently bliss does not have log files
+                if not bliss:
                     log_file = os.path.join(dirpath, f).replace('.dat','.log')
                     if check_logs(log_file, bliss=bliss)=="incomplete": #or not os.path.isfile(log_file): <---- this is the edit to get_dats()
                         logging.info(f"{log_file} is incomplete. Please check it. Skipping this file...")
@@ -119,15 +115,8 @@ def load_dat_df(dat_file,filtuple):
     return full_dat_df
 
 # use blimpy to grab the data slice from the filterbank file over the frequency range provided
-"""ATTENTION - this takes .5 sec about 1300 calls"""
 def wf_data(fil,f1,f2):
     return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
-
-def get_wf(fil):
-    return bl.Waterfall(fil)
-
-def wf_data_range(bl_wf, f1, f2):
-    return bl_wf.grab_data(f1, f2)
 
 # get the normalization factor of a 2D array
 def ACF(s1):
@@ -191,36 +180,16 @@ def resume(pickle_file, df):
 def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4):
     if sf==None:
         sf=4
-    
-    """
-    Also would it be faster to read in the waterfall for the entire range ONCE and then access that by frequency ranges
-    so not READING in waterfall with EACH range ?
-    """
-
-    for r,row in df.iterrows(): # each hit
-        # print(row) # TODO a single row is a formatted single string of multiple columns? :/
+    # loop over every row in the dataframe
+    for r,row in df.iterrows():
         if resume_index is not None and r < resume_index:
             continue  # skip rows before the resume index
-        # identify the target beam .fil file
+        # identify the target beam .fil file 
         matching_col = row.filter(like='fil_').apply(lambda x: x == row['dat_name']).idxmax()
         target_fil = row[matching_col]
         # get the filterbank metadata
-        """ATTENTION - I think this is taking the most time 
-        ~ .5 seconds and called ~2000 times
-        esp the hdf reader
-        specifically dataset.py ? and being called almost 3 times per call of waterfall?
-        """
-        try:
-            fil_meta = bl.Waterfall(target_fil,load_data=False)
-        except Exception as e:
-            logging.info(f"Failed to load fil meta with bl.Waterfall for {target_fil}")
-            logging.info(f"Error: {e}")
-            logging.info("skipping this row...")
-            continue
-        """END - ATTN"""
-        
-        
-        # # determine the frequency boundaries in the .fil file
+        fil_meta = bl.Waterfall(target_fil,load_data=False)
+        # determine the frequency boundaries in the .fil file
         minimum_frequency = fil_meta.container.f_start
         maximum_frequency = fil_meta.container.f_stop
         # calculate the narrow signal window using the reported drift rate and metadata
@@ -239,13 +208,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         f1=round(max(fmid-half_span*1e-6,minimum_frequency),6)
         f2=round(min(fmid+half_span*1e-6,maximum_frequency),6)
         # grab the signal data in the target beam fil file
-        """
-        ATTENTION - this calls wf_data which takes .5s and about 1000 calls but seems like calling waterfall twice?
-        """
-        # now set f_start and f_stop of the waterfall and call read_data 
-        # then grab data for frange,s0
-        frange,s0=wf_data(target_fil,f1,f2) # bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
-        
+        frange,s0=wf_data(target_fil,f1,f2)
         # calculate the SNR
         SNR0 = mySNR(s0)
         # get a list of all the other fil files for all the other beams
@@ -267,11 +230,9 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
             corrs.append(sig_cor(s0-noise_median(s0),s1-noise_median(s1)))
             # x scores no longer used
             # xs.append(min(corrs[-1]/(SNR_ratios[-1]/sf),1.0)) 
-
         # add the correlation scores, SNRs and SNR-ratios to the dataframe
-        # TODO not doing anything with SNR ratio value her e- can be vectorized
-        for i,x in enumerate(SNR_ratios): # TODO SNR_RATIOS is always shape 1?
-            col_name_corrs='corrs_'+other_cols[i].split('beam')[-1].split('.')[0] # TODO this is always 0001 ?
+        for i,x in enumerate(SNR_ratios):
+            col_name_corrs='corrs_'+other_cols[i].split('beam')[-1].split('.')[0]
             df.loc[r,col_name_corrs] = corrs[i]
             col_name_SNRr='SNR_ratio_'+other_cols[i].split('beam')[-1].split('.')[0]
             df.loc[r,col_name_SNRr] = SNR_ratios[i]
@@ -287,7 +248,6 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
         if pickle_off==False:
             with open(outdir+f'{obs}_comb_df.pkl', 'wb') as f:
                 pickle.dump((r, df), f) 
-    # print(always_the_same.count(False))
     # remove the pickle checkpoint file after all loops complete
     if os.path.exists(outdir+f"{obs}_comb_df.pkl"):
         os.remove(outdir+f"{obs}_comb_df.pkl") 

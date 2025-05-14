@@ -101,6 +101,56 @@ def parse_args():
         odict["outdir"] = outdir  
     return odict
 
+def check_cmd_args(args):
+    # Check for trailing slash in the directory path and add it if absent
+    odict = args if type(args) == dict else vars(args)
+    if odict["outdir"]:
+        # outdir = odict["outdir"][0]
+        outdir = odict["outdir"]
+        if outdir[-1] != "/":
+            outdir += "/"
+        odict["outdir"] = outdir  
+    else:
+        odict["outdir"] = "" # this should actually be default to datdir in csv
+
+    # Set defaults when not using parser bc not using cmd line args
+    if "col" not in odict:
+        odict["col"] = None
+    if "op" not in odict:
+        odict["op"] = None
+    if "val" not in odict:
+        odict["val"] = None
+    if "stack" not in odict:
+        odict["stack"] = None
+    if "zoom" not in odict:
+        odict["zoom"] = None
+    if "nbeams" not in odict:
+        odict["nbeams"] = 2
+    if "tbeam" not in odict:
+        odict["tbeam"] = 0
+    if "sf" not in odict:
+        odict["sf"] = 4.0
+    if "num_backup_plots" not in odict:
+        odict["num_backup_plots"] = 1
+    if "cutoff" not in odict:
+        odict["cutoff"] = 500
+    if "clobber" not in odict:
+        odict["clobber"] = False
+    if "pdf" not in odict:
+        odict["pdf"] = False
+    if "before" not in odict:
+        odict["before"] = None
+    if "after" not in odict:
+        odict["after"] = None
+    if "fbelow" not in odict:
+        odict["fbelow"] = None
+    if "fabove" not in odict:
+        odict["fabove"] = None
+    if "freqs" not in odict:
+        odict["freqs"] = None
+    # Returns the input argument as a labeled array
+    return odict
+
 # function to help parse space separated tuple input from command line 
 def list_parser(input_str):
     try:
@@ -154,12 +204,16 @@ def default_filter(df,sf,cutnum,num_backup_plots):
     xcutoff=np.linspace(-0.05,1.05,1000)
     ycutoff=np.array([0.9*sf*max(j-0.05,0)**(1/3) for j in xcutoff])
     dfx=df[np.interp(df.corrs,xcutoff,ycutoff)<df.SNR_ratio].reset_index(drop=True)
+    # Sort by SNR *ratio* between on and off - descending
     dfx=dfx.sort_values(by='SNR_ratio',ascending=False).reset_index(drop=True)
     dfsf=dfx[dfx.SNR_ratio>sf].reset_index(drop=True)
+    # if more than cutnum hits above the SNR ratio sf 
     if len(dfsf)>cutnum:
+        # then sort by correlation score (x axis)
         signals_of_interest = dfsf.sort_values(by='corrs',ascending=True).reset_index(drop=True).iloc[:cutnum]
     else:
         signals_of_interest = dfsf.iloc[:cutnum]
+    # or else if nothing above sf then ignore cutnum and sort by correlation
     if signals_of_interest.empty==True:
         print(f"Warning: Default filtering produced an empty dataset. Reverting to lowest scores of the original dataset.\n")
         signals_of_interest = dfx.sort_values(by='corrs',ascending=True).reset_index(drop=True).iloc[:num_backup_plots]
