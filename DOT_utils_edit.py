@@ -370,7 +370,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
     
     ## Done with this scan (both beams) can remove from temporary buf location 
     if tmp_loc is not None:
-        print("tmp_loc is not None now cleaning up supposedly")
+        # print("tmp_loc is not None now cleaning up supposedly")
         cleanup_tmp_buf(target_fil)
         for other_fil in other_fils:
             print(f"Cleaning up {other_fil}")
