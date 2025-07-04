@@ -141,6 +141,19 @@ def move_to_tmp_buf(og_fil_loc, sub_identifier):
             return og_fil_loc, None
     return tmp_fil_dst, tmp_loc_base_dir
 
+def remove_from_tmp_buf(tmp_base, tmp_fils_loc, curr_proc_count=0):
+    """
+    Remove the temporary file from buf0.
+    """
+    # this means it is in original location and do not want to delete !!
+    if tmp_base is not None:
+        try:
+            for fil in tmp_fils_loc:
+                os.remove(fil)
+                print(f"[{curr_proc_count}] Removed temporary file: {fil}")
+        except OSError as e:
+            print(f"** [{curr_proc_count}] Error removing temporary file: **\n\t{e}")
+
 def listener_configurer(log_file):
     root = logging.getLogger()
     handler = logging.FileHandler(log_file, mode='a')
@@ -208,7 +221,7 @@ def dat_to_dataframe(args):
     with count_lock:
         proc_count.value += 1
         curr_proc_count = proc_count.value
-        print(f"\n**[{curr_proc_count}] TAKING LOCK**")
+        print(f"\n** [{curr_proc_count}] TAKING LOCK **")
 
         """
         Different log file per process so can write to without requiring lock
@@ -231,7 +244,7 @@ def dat_to_dataframe(args):
             # dataframe_profiler.end_and_save_profiler()
             # profile_manager.active_profilers.remove(dataframe_profiler)
             return pd.DataFrame(),0,1,0
-        curr_proc_logger.info(f'[{curr_proc_count}] Processing dat file {curr_proc_count}/{ndats}\n{dat_name}')
+        curr_proc_logger.info(f'[{curr_proc_count}] Processing dat file {curr_proc_count}/{ndats}\n\t{dat_name}')
         hits,skipped,exact_matches=0,0,0
         
         ## make a tuple with the corresponding fil/h5 files
@@ -250,6 +263,7 @@ def dat_to_dataframe(args):
             # dataframe_profiler.add_section(f"Skipping because could not locate filterbank files in {fils_base}?")
             curr_proc_logger.info(f'[{curr_proc_count}] WARNING! Could not locate filterbank files in:\n\t{fils_base}')
             curr_proc_logger.info(f'[{curr_proc_count}] Skipping...\n')
+            remove_from_tmp_buf(tmp_base, fils, curr_proc_count)
             skipped+=1
             mid, time_label = DOT.get_elapsed_time(start)
             curr_proc_logger.info(f"\n[{curr_proc_count}/{ndats}] Finished processing in %.2f {time_label}." %mid)
@@ -272,7 +286,7 @@ def dat_to_dataframe(args):
         ## only part that need to be in lock
         if not os.path.exists(tmp_loc_base_dir):
             os.makedirs(tmp_loc_base_dir, exist_ok=True)
-        print(f"**[{curr_proc_count}] RELEASING LOCK**\n")
+        print(f"** [{curr_proc_count}] RELEASING LOCK **\n")
 
     ## Move to tmp buf0 for faster warerfall?
     # dataframe_profiler.add_section("Moving to /mnt/buf0/NBeamAnalysisTMP/")
@@ -286,6 +300,8 @@ def dat_to_dataframe(args):
             fils[i] = new_tmp_loc # now will reference copy
     
     # dataframe_profiler.add_section("DOT.load_dat_df")
+    # TODO 
+    # this step doesnt actually need the file just uses the file name in which case want og location not tmp location 
     df0 = DOT.load_dat_df(dat,fils)
         
     # dataframe_profiler.add_section("Sort by Corrected_frequency")
@@ -294,6 +310,7 @@ def dat_to_dataframe(args):
         # dataframe_profiler.add_section("df0.empty True")
         curr_proc_logger.info(f'\t[{curr_proc_count}] WARNING! No hits found in this dat file.')
         curr_proc_logger.info(f'\t[{curr_proc_count}] Skipping...')
+        remove_from_tmp_buf(tmp_base, fils, curr_proc_count)
         skipped+=1
         mid, time_label = DOT.get_elapsed_time(start)
         curr_proc_logger.info(f"\n[{curr_proc_count}/{ndats}] Finished processing in %.2f {time_label}." %mid)
@@ -322,6 +339,7 @@ def dat_to_dataframe(args):
         # dataframe_profiler.add_section("Empty dataframe")
         curr_proc_logger.info(f'\t[{curr_proc_count}] WARNING! Empty dataframe constructed after spatial filtering of dat file.')
         curr_proc_logger.info(f'\t[{curr_proc_count}] Skipping this dat file because there are no remaining hits to comb through...')
+        remove_from_tmp_buf(tmp_base, fils, curr_proc_count)
         skipped+=1
         temp_df = pd.DataFrame()
     else:
@@ -339,6 +357,7 @@ def dat_to_dataframe(args):
             except Exception as e:
                 curr_proc_logger.error(f"[{curr_proc_count}] Unable to comb through hits from original location!\n{e}")
                 curr_proc_logger.info(f'\tSkipping this dat file.')
+                remove_from_tmp_buf(tmp_base, fils, curr_proc_count)
                 skipped+=1
                 temp_df = pd.DataFrame()
 
@@ -449,7 +468,7 @@ def main(cmd_args):
         if ncore==None: # TODO run with 1 core 
             num_processes = os.cpu_count()
         else:
-            num_processes = ncore
+            num_processes = ncore 
         logging.info(f"\n{num_processes} cores requested by user for parallel processing.")
 
         ## Initialize the Manager object for shared variables
