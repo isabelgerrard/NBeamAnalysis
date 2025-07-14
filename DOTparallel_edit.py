@@ -39,7 +39,7 @@ import traceback
 # sys.path.append("./NBeamAnalysis")
 import DOT_utils_edit as DOT
 # import DOT_utils_wfhitlooponly as DOT
-from time_profiler import ProfileManager, TimeProfiler
+from Pipeline.time_profiler import ProfileManager, TimeProfiler
 
 import logging
 import logging.handlers
