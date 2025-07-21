@@ -39,7 +39,7 @@ import traceback
 # sys.path.append("./NBeamAnalysis")
 import DOT_utils_edit as DOT
 # import DOT_utils_wfhitlooponly as DOT
-from Pipeline.time_profiler import ProfileManager, TimeProfiler
+# from Pipeline.time_profiler import ProfileManager, TimeProfiler
 
 import logging
 import logging.handlers
@@ -203,7 +203,7 @@ and put the remaining hits into a dataframe.
 """
 def dat_to_dataframe(args):
     # dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
-    dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, prof_dst = args
+    dat, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after = args
     dat_name = "/".join(dat.split("/")[-2:])
     # node_name = dat.split("/")[-2]
     identifier = dat_name
@@ -372,9 +372,9 @@ def dat_to_dataframe(args):
 
     # Main program execution
 def main(cmd_args):
-    time_profile_dst = cmd_args["profdst"]  # todo, just path for where profiling logs going to 
+    # time_profile_dst = cmd_args["profdst"]  # todo, just path for where profiling logs going to 
     test_subset = cmd_args["datdir_subset"]  # todo, just path for only processing some while testing
-    profile_manager = ProfileManager()
+    # profile_manager = ProfileManager()
 
     print("in dot parallel edit")
     listener = None
@@ -403,10 +403,10 @@ def main(cmd_args):
         after = cmd_args["after"]       # optional, MJD to limit observations
         bliss = cmd_args["bliss"]       # optional, set True if using bliss
         
-        scan_time_dst = time_profile_dst + "DOTParallel/" # PROF_DST
-        dp_profiler = profile_manager.start_profiler("night", 0, scan_time_dst, append_to_header=datdir, restart=False)
+        # scan_time_dst = time_profile_dst + "DOTParallel/" # PROF_DST
+        # dp_profiler = profile_manager.start_profiler("night", 0, scan_time_dst, append_to_header=datdir, restart=False)
 
-        dp_profiler.add_section("Creating output directories")
+        # dp_profiler.add_section("Creating output directories")
 
         ## create the output directory if the specified path does not exist
         if not os.path.isdir(outdir):
@@ -422,7 +422,7 @@ def main(cmd_args):
             obs = tag[0]
 
         
-        dp_profiler.add_section("Configure Logging")
+        # dp_profiler.add_section("Configure Logging")
         # configure the output log file
         logfile=outdir+f'{obs}_out.txt'
         
@@ -443,7 +443,7 @@ def main(cmd_args):
         logging.info(f"Initial CPU usage for each of the {os.cpu_count()} cores:\n{psutil.cpu_percent(percpu=True)}")
 
         ## find and get a list of tuples of all the dat files corresponding to each subset of the observation
-        dp_profiler.add_section("DOT.get_dats : find and get a list of tuples of all the dat files corresponding to each subset of the observation")
+        # dp_profiler.add_section("DOT.get_dats : find and get a list of tuples of all the dat files corresponding to each subset of the observation")
         dat_files,errors = DOT.get_dats(datdir,beam,bliss)
 
         # make sure dat_files is not empty
@@ -459,7 +459,7 @@ def main(cmd_args):
         # dats_profiler.end_and_save_profiler()
         # profile_manager.active_profilers.remove(dats_profiler)
 
-        dp_profiler.add_section("Start Parallelization")
+        # dp_profiler.add_section("Start Parallelization")
         # parallel_profiler = profile_manager.start_profiler("proc", "2_parallelization", scan_time_dst, restart=False)
         ndats=len(dat_files)
 
@@ -480,31 +480,32 @@ def main(cmd_args):
         log_queue = proc_manager.Queue()
         
         ## Execute the parallelized function
-        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, time_profile_dst) for dat_file in dat_files if any(node in dat_file for node in test_subset)]
+        # input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, time_profile_dst) for dat_file in dat_files if any(node in dat_file for node in test_subset)]
+        input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after) for dat_file in dat_files if any(node in dat_file for node in test_subset)]
         
         with Pool(num_processes, initializer=worker_configurer, initargs=(log_queue,)) as pool:
             results = pool.map(dat_to_dataframe, input_args) # starts -> each process gets a node -> when done with node that process is idle
 
-        dp_profiler.add_section("Handle closing logging listener thread")
+        # dp_profiler.add_section("Handle closing logging listener thread")
         logging.info("\n*** Finished processing all dat files. ***")
         ## Tell listener to shut down
         log_queue.put(None) 
         listener = check_listener(listener) 
 
         ## Process the results as needed
-        dp_profiler.add_section("Processing results")
+        # dp_profiler.add_section("Processing results")
         logging.info("Processing results")
         result_dataframes, hits, skipped, exact_matches = zip(*results)
 
         ## Concatenate the dataframes into a single dataframe
-        dp_profiler.add_section("Concatenate the dataframes into a single dataframe and save to csv")
+        # dp_profiler.add_section("Concatenate the dataframes into a single dataframe and save to csv")
         logging.info("Concatenating dataframes and saving to csv")
         full_df = pd.concat(result_dataframes, ignore_index=True)
         test_dst = os.path.join(os.getcwd(), f"{outdir}{obs}_DOTnbeam.csv")
         full_df.to_csv(test_dst)
 
         ## Do something with the counters if needed
-        dp_profiler.add_section("Do something with counters if needed")
+        # dp_profiler.add_section("Do something with counters if needed")
         total_hits = sum(hits)
         total_skipped = sum(skipped)
         total_exact_matches = sum(exact_matches)
@@ -512,7 +513,7 @@ def main(cmd_args):
         if sf==None:
             sf=4 
 
-        dp_profiler.add_section("Handling SNR_ratio")
+        # dp_profiler.add_section("Handling SNR_ratio")
         logging.info("Handling SNR ratio")
 
         if 'SNR_ratio' in full_df.columns and full_df['SNR_ratio'].notnull().any():
@@ -520,7 +521,7 @@ def main(cmd_args):
             diagnostic_plotter(full_df, obs, saving=True, outdir=outdir)
 
             ## plot the SNR ratios vs the correlation scores for each hit in the target beam
-            dp_profiler.add_section("Plot theSNR ratios vs the correlation scores for each hit in the target beam")
+            # dp_profiler.add_section("Plot theSNR ratios vs the correlation scores for each hit in the target beam")
             x = full_df.corrs
             SNRr = full_df.SNR_ratio
             fig,ax=plt.subplots(figsize=(12,10))
@@ -553,7 +554,7 @@ def main(cmd_args):
         logging.info(f"\n**Final results:")
         
         ## Final print block
-        dp_profiler.add_section("File print block")
+        # dp_profiler.add_section("File print block")
         if total_skipped>0:
             logging.info(f'\n\t{total_skipped}/{ndats} dat files skipped. Check the log for skipped filenames.\n')
         end, time_label = DOT.get_elapsed_time(start)
@@ -574,15 +575,15 @@ def main(cmd_args):
             logging.info(f"\nThe full dataframe was saved to: {outdir}{obs}_DOTnbeam.csv")
 
         ## Signal the monitoring thread to exit
-        dp_profiler.add_section("Signal the monitoring thread to exit")
+        # dp_profiler.add_section("Signal the monitoring thread to exit")
         exit_flag.set()
 
         ## Allow some time for the monitoring thread to finish
-        dp_profiler.add_section("Allow some time for the monitoring thread to finish")
+        # dp_profiler.add_section("Allow some time for the monitoring thread to finish")
         monitor_thread.join(timeout=5)  # Adjust the timeout if needed
 
         ## Calculate and print the average CPU usage over time
-        dp_profiler.add_section("Calculate and print the average CPU usage over time")
+        # dp_profiler.add_section("Calculate and print the average CPU usage over time")
         if samples:
             num_samples = len(samples)
             num_cores = len(samples[0])
@@ -596,8 +597,8 @@ def main(cmd_args):
         print("\n\tExiting NBEAM with Ctrl+C ...")
     finally:
         ## Clean up active profilers
-        print("\n\tCleaning up active profilers in DOTparallel_edit...")
-        profile_manager.stop_and_save_all()
+        # print("\n\tCleaning up active profilers in DOTparallel_edit...")
+        # profile_manager.stop_and_save_all()
         check_listener(listener)
     return None
 
@@ -614,7 +615,7 @@ if __name__ == "__main__":
     # main(cmd_args)
 
     sys.path.append("../")
-    from time_profiler import ProfileManager, TimeProfiler
+    # from time_profiler import ProfileManager, TimeProfiler
 
     night, scan = NIGHT, SCAN
     datdir = f"/mnt/primary/scratch/igerrard/ASP/bliss_outputs/{night}/{scan}/" # required input
@@ -633,14 +634,14 @@ if __name__ == "__main__":
     # and set defaults 
     cmd_args = check_cmd_args(cmd_args)
 
-    profile_manager = ProfileManager()
+    # profile_manager = ProfileManager()
 
     try:
         main(cmd_args)
     except KeyboardInterrupt:
         print("\n\tExiting with Ctrl+C\n\tCleaning up...")
-    finally:
-        # Clean up active profilers
-        profile_manager.stop_and_save_all()
+    # finally:
+    #     # Clean up active profilers
+    #     profile_manager.stop_and_save_all()
 
     

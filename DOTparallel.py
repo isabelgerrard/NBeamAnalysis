@@ -36,7 +36,7 @@ from matplotlib.ticker import ScalarFormatter
 # import DOT_utils as DOT
 import DOT_utils_edit as DOT
 # import DOT_utils_wfhitlooponly as DOT
-from time_profiler import ProfileManager, TimeProfiler
+# from time_profiler import ProfileManager, TimeProfiler
 
 import logging
 import psutil
@@ -290,17 +290,17 @@ def dat_to_dataframe(args):
 
     # Main program execution
 def main(cmd_args):
-    prof_dst = cmd_args["profdst"]  # todo, just path for where profiling logs going to 
+    # prof_dst = cmd_args["profdst"]  # todo, just path for where profiling logs going to 
     profile_manager = ProfileManager()
 
     try:
         # scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/WFHit_vector_blimpy_1core_allnodes_nocopy/DOTParallel/" # PROF_DST
         # scan_time_dst = f"/mnt/primary/scratch/igerrard/ASP/Benchmarking/Original/DOTParallel/" # PROF_DST
-        scan_time_dst = prof_dst + "DOTParallel/" # PROF_DST
-        dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
+        # scan_time_dst = prof_dst + "DOTParallel/" # PROF_DST
+        # dp_profiler = profile_manager.start_profiler("scan", 0, scan_time_dst, dataset = SCAN, restart=False)
 
         """OKAY - Threading takes 0.0 seconds"""
-        dp_profiler.add_section("Threading to monitor CPU usafe during parallel execution")
+        # dp_profiler.add_section("Threading to monitor CPU usafe during parallel execution")
         start=time.time()
 
         global exit_flag
@@ -369,9 +369,9 @@ def main(cmd_args):
         Dot.get_dats takes <1 second (~.7s)
         Because of os.walk
         """
-        dats_profiler = profile_manager.start_profiler("proc", "1_DOT.get_dats", scan_time_dst, restart=False)
-        dp_profiler.add_section("DOT.get_dats : find and get a list of tuples of all the dat files corresponding to each subset of the observation")
-        dats_profiler.add_section("DOT.get_dats")
+        # dats_profiler = profile_manager.start_profiler("proc", "1_DOT.get_dats", scan_time_dst, restart=False)
+        # dp_profiler.add_section("DOT.get_dats : find and get a list of tuples of all the dat files corresponding to each subset of the observation")
+        # dats_profiler.add_section("DOT.get_dats")
         dat_files,errors = DOT.get_dats(datdir,beam,bliss)
 
         # make sure dat_files is not empty
@@ -389,12 +389,12 @@ def main(cmd_args):
         """END - Dot.get_dats takes <1 second (~.7s)"""
 
         """ATTENTION - Parallelization is taking all the time - about 3.5 hours"""
-        dp_profiler.add_section("Start Parallelization")
-        parallel_profiler = profile_manager.start_profiler("proc", "2_parallelization", scan_time_dst, restart=False)
+        # dp_profiler.add_section("Start Parallelization")
+        # parallel_profiler = profile_manager.start_profiler("proc", "2_parallelization", scan_time_dst, restart=False)
         ndats=len(dat_files)
 
         """OKAY - takes 0.0 seconds"""
-        parallel_profiler.add_section("Get num_processes")
+        # parallel_profiler.add_section("Get num_processes")
         # Here's where things start to get fancy with parellelization
         if ncore==None: # TODO run with 1 core 
             num_processes = os.cpu_count()
@@ -403,7 +403,7 @@ def main(cmd_args):
         logging.info(f"\n{num_processes} cores requested by user for parallel processing.")
         """OKAY - takes 0.0 seconds"""
 
-        parallel_profiler.add_section("Initialize manager for shared variables")
+        # parallel_profiler.add_section("Initialize manager for shared variables")
         # Initialize the Manager object for shared variables
         manager = Manager()
         count_lock = manager.Lock()
@@ -442,8 +442,8 @@ def main(cmd_args):
 
         # TODO
         """BREAKS HERE"""
-        dp_profiler.add_section("Processing results")
-        results_profiler = profile_manager.start_profiler("proc", "3_results", scan_time_dst, restart=False)
+        # dp_profiler.add_section("Processing results")
+        # results_profiler = profile_manager.start_profiler("proc", "3_results", scan_time_dst, restart=False)
         # Process the results as needed
         results_profiler.add_section("Process results as needed")
         result_dataframes, hits, skipped, exact_matches = zip(*results)
@@ -467,16 +467,16 @@ def main(cmd_args):
         if sf==None:
             sf=4 
 
-        dp_profiler.add_section("Handling SNR_ratio")
+        # dp_profiler.add_section("Handling SNR_ratio")
 
         if 'SNR_ratio' in full_df.columns and full_df['SNR_ratio'].notnull().any():
-            snr_profiler = profile_manager.start_profiler("proc", "4_snr_ratio", scan_time_dst, restart=False)
-            snr_profiler.add_section("Plot histograms for hits within the target beam")
+            # snr_profiler = profile_manager.start_profiler("proc", "4_snr_ratio", scan_time_dst, restart=False)
+            # snr_profiler.add_section("Plot histograms for hits within the target beam")
             # plot the histograms for hits within the target beam
             diagnostic_plotter(full_df, obs, saving=True, outdir=outdir)
 
             # plot the SNR ratios vs the correlation scores for each hit in the target beam
-            snr_profiler.add_section("Plot theSNR ratios vs the correlation scores for each hit in the target beam")
+            # snr_profiler.add_section("Plot theSNR ratios vs the correlation scores for each hit in the target beam")
             x = full_df.corrs
             SNRr = full_df.SNR_ratio
             fig,ax=plt.subplots(figsize=(12,10))
@@ -506,12 +506,12 @@ def main(cmd_args):
                 if np.interp(score,xcutoff,ycutoff)<SNRr[i]:
                     above_cutoff+=1
 
-            snr_profiler.end_and_save_profiler()
-            profile_manager.active_profilers.remove(snr_profiler)
+            # snr_profiler.end_and_save_profiler()
+            # profile_manager.active_profilers.remove(snr_profiler)
         logging.info(f"\n**Final results:")
         
         # Final print block
-        dp_profiler.add_section("File print block")
+        # dp_profiler.add_section("File print block")
         if total_skipped>0:
             logging.info(f'\n\t{total_skipped}/{ndats} dat files skipped. Check the log for skipped filenames.\n')
         end, time_label = DOT.get_elapsed_time(start)
@@ -532,15 +532,15 @@ def main(cmd_args):
             logging.info(f"\nThe full dataframe was saved to: {outdir}{obs}_DOTnbeam.csv")
 
         # Signal the monitoring thread to exit
-        dp_profiler.add_section("Signal the monitoring thread to exit")
+        # dp_profiler.add_section("Signal the monitoring thread to exit")
         exit_flag.set()
 
         # Allow some time for the monitoring thread to finish
-        dp_profiler.add_section("Allow some time for the monitoring thread to finish")
+        # dp_profiler.add_section("Allow some time for the monitoring thread to finish")
         monitor_thread.join(timeout=5)  # Adjust the timeout if needed
 
         # Calculate and print the average CPU usage over time
-        dp_profiler.add_section("Calculate and print the average CPU usage over time")
+        # dp_profiler.add_section("Calculate and print the average CPU usage over time")
         if samples:
             num_samples = len(samples)
             num_cores = len(samples[0])
@@ -552,9 +552,9 @@ def main(cmd_args):
         logging.info(f"\n\tProgram complete!\n")
     except KeyboardInterrupt:
         print("\n\tExiting with Ctrl+C\n\tCleaning up...")
-    finally:
+    # finally:
         # Clean up active profilers
-        profile_manager.stop_and_save_all()
+        # profile_manager.stop_and_save_all()
     return None
 
 #%% run it!
@@ -570,7 +570,7 @@ if __name__ == "__main__":
     # main(cmd_args)
 
     sys.path.append("../")
-    from time_profiler import ProfileManager, TimeProfiler
+    # from time_profiler import ProfileManager, TimeProfiler
 
     night, scan = NIGHT, SCAN
     datdir = f"/mnt/primary/scratch/igerrard/ASP/bliss_outputs/{night}/{scan}/" # required input
@@ -589,14 +589,14 @@ if __name__ == "__main__":
     # and set defaults 
     cmd_args = check_cmd_args(cmd_args)
 
-    profile_manager = ProfileManager()
+    # profile_manager = ProfileManager()
 
     try:
         main(cmd_args)
     except KeyboardInterrupt:
         print("\n\tExiting with Ctrl+C\n\tCleaning up...")
-    finally:
+    # finally:
         # Clean up active profilers
-        profile_manager.stop_and_save_all()
+        # profile_manager.stop_and_save_all()
 
     
