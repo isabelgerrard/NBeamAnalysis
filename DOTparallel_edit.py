@@ -150,7 +150,7 @@ def remove_from_tmp_buf(tmp_base, tmp_fils_loc, curr_proc_count=0):
         try:
             for fil in tmp_fils_loc:
                 os.remove(fil)
-                print(f"[{curr_proc_count}] Removed temporary file: {fil}")
+                # print(f"[{curr_proc_count}] Removed temporary file: {fil}")
         except OSError as e:
             print(f"** [{curr_proc_count}] Error removing temporary file: **\n\t{e}")
 
