@@ -35,6 +35,7 @@ from matplotlib.ticker import ScalarFormatter
 import shutil
 import traceback
 from pathlib import Path
+import pickle
 
 import DOT_utils as DOT
 
@@ -129,16 +130,21 @@ def move_to_tmp_buf(tmp_mount_dst, og_fil_loc, sub_identifier):
     tmp_loc_base_dir = os.path.join(tmp_mount_dst, sub_identifier)
     tmp_fil_dst = os.path.join(tmp_loc_base_dir, os.path.basename(og_fil_loc))
     # shutil.copy(og_fil_loc, tmp_loc_base_dir)
-    with open(og_fil_loc, 'rb') as src_file, open(tmp_fil_dst, 'wb') as dst_file:
-        shutil.copyfileobj(src_file, dst_file)
-        dst_file.flush()
-        try:
-            os.fsync(dst_file.fileno())
-        except OSError as e:
-            # Handle the error or log it
-            print(f"fsync failed: {e}")
-            return og_fil_loc, None
-    return tmp_fil_dst, tmp_loc_base_dir
+    try:
+        with open(og_fil_loc, 'rb') as src_file, open(tmp_fil_dst, 'wb') as dst_file:
+            shutil.copyfileobj(src_file, dst_file)
+            dst_file.flush()
+            try:
+                os.fsync(dst_file.fileno())
+            except OSError as e:
+                # Handle the error or log it
+                print(f"fsync failed: {e}")
+                return og_fil_loc, None
+        return tmp_fil_dst, tmp_loc_base_dir
+    except:
+        ## in case /mnt/buf0 is full then reference og location
+        return og_fil_loc, None
+
 
 def remove_from_tmp_buf(tmp_base, tmp_fils_loc, curr_proc_count=0):
     """
@@ -150,7 +156,9 @@ def remove_from_tmp_buf(tmp_base, tmp_fils_loc, curr_proc_count=0):
             for fil in tmp_fils_loc:
                 os.remove(fil)
         except OSError as e:
-            print(f"** [{curr_proc_count}] Error removing temporary file: **\n\t{e}")
+            pass
+            # print(f"** [{curr_proc_count}] Error removing temporary file: **\n\t{e}")
+
 
 def listener_configurer(log_file):
     root = logging.getLogger()
@@ -192,9 +200,56 @@ def check_listener(listener):
         listener.join(timeout=5)
         if listener.is_alive():
             print("Listener join timed out.")
-        else:
-            listener.close()
+        listener.close()
     return listener
+
+def load_results_progress(outdir, obs):
+    progress_dir = os.path.join(outdir, "progress")
+    if os.path.exists(progress_dir):
+        logging.info(f"\n***\nSaved NBeam output progress found {progress_dir}. Loading in, will skip those files, and concatenate new results to the end.\n***")
+        try:
+            og_full_df = pd.read_csv(os.path.join(progress_dir, f"{obs}_progress_DOTnbeam.csv"))
+            with open(os.path.join(progress_dir, "hits.pkl"), "rb") as f:
+                og_hits = pickle.load(f)
+            with open(os.path.join(progress_dir, "skipped.pkl"), "rb") as f:
+                og_skipped = pickle.load(f)
+            with open(os.path.join(progress_dir, "exact_matches.pkl"), "rb") as f:
+                og_exact_matches = pickle.load(f)
+        except Exception as e:
+            logging.info("***Progress found but was unable to load. Starting from the beginning...")
+            logging.info(e)
+            og_full_df = None
+            og_hits, og_skipped, og_exact_matches = (), (), ()
+    else:
+        og_full_df = None
+        og_hits, og_skipped, og_exact_matches = (), (), ()
+    return og_full_df, og_hits, og_skipped, og_exact_matches
+
+def save_results_progress(outdir, obs, full_df, hits, skipped, exact_matches):
+    progress_dir = os.path.join(outdir, "progress")
+    Path(progress_dir).mkdir(parents=True, exist_ok=True)
+    progress_dst = os.path.join(progress_dir, f"{obs}_progress_DOTnbeam.csv")
+    logging.info(f"Saving partial results...")
+    try:
+        ## save results_dataframes
+        full_df.to_csv(progress_dst)
+        ## save hits
+        h_dst = os.path.join(progress_dir, "hits.pkl")
+        with open(h_dst, "wb") as f:
+            pickle.dump(hits, f)
+        ## save skipped
+        s_dst = os.path.join(progress_dir, "skipped.pkl")
+        with open(s_dst, "wb") as f:
+            pickle.dump(skipped, f)
+        ## save exact_matches
+        em_dst = os.path.join(progress_dir, "exact_matches.pkl")
+        with open(em_dst, "wb") as f:
+            pickle.dump(exact_matches, f)
+
+        logging.info(f"Partial results saved to: {progress_dir}")
+    except Exception as e:
+        logging.info(f"Unable to save partial results: {e}")
+
 
 """
 dat processing function for parallelization.
@@ -271,7 +326,7 @@ def dat_to_dataframe(args):
             new_tmp_loc, tmp_base = move_to_tmp_buf(tmp_mount, fil_file, sub_identifier)
             if tmp_base is None:
                 curr_proc_logger.info(f'\t[{curr_proc_count}] Copy to buf0 failed to flush to disk to ensure persistence. This process will use the original file location:{new_tmp_loc}')
-                curr_proc_logger.info(f'\t[{curr_proc_count}] These should be equal True: {new_tmp_loc} == {fil_file}:\n{new_tmp_loc} = {fil_file}')
+                # curr_proc_logger.info(f'\t[{curr_proc_count}] These should be equal True: {new_tmp_loc} == {fil_file}:\n{new_tmp_loc} = {fil_file}')
             else:
                 fils[i] = new_tmp_loc # now will reference copy
     else:
@@ -330,6 +385,12 @@ def dat_to_dataframe(args):
 
     mid, time_label = DOT.get_elapsed_time(start)
     curr_proc_logger.info(f"\n[{curr_proc_count}/{ndats}] Finished processing in %.2f {time_label}." %mid)
+    try:
+        remove_from_tmp_buf(tmp_base, fils, curr_proc_count)
+        # curr_proc_logger.info(f"[{curr_proc_count}] Removed from buf0 in final try/except!\n\t{fils}")
+    except Exception as e:
+        # print("Unable to remove from buf0. Hopefully because was already deleted from empty df or from comb_df.")
+        pass
     
     return temp_df,hits,skipped,exact_matches
 
@@ -367,6 +428,7 @@ def main(cmd_args):
         if not os.path.isdir(outdir):
             Path(outdir).mkdir(parents=True, exist_ok=True)
 
+
         ## set a unique file identifier if not defined by input
         if tag == None:
             try:
@@ -395,6 +457,9 @@ def main(cmd_args):
         logging.info("\nExecuting program...")
         logging.info(f"Initial CPU usage for each of the {os.cpu_count()} cores:\n{psutil.cpu_percent(percpu=True)}")
 
+        ## if nbeam was run previously, load already processed results so don't have to start over
+        og_full_df, og_hits, og_skipped, og_exact_matches = load_results_progress(outdir, obs)
+
         ## find and get a list of tuples of all the dat files corresponding to each subset of the observation
         dat_files,errors = DOT.get_dats(datdir,beam,bliss)
 
@@ -409,6 +474,11 @@ def main(cmd_args):
         if sf==None:
             logging.info("\nNo spatial filtering being applied since sf flag was not toggled on input command.\n")
 
+        if og_full_df is not None: ## skip dat_files already processed 
+            processed_dats = og_full_df['dat_name'].unique()
+            num_dats_processed = len(processed_dats)
+            logging.info(f"Skipping {num_dats_processed} dats that have already been fully processed and their progress saved.")
+            dat_files = [dat_file for dat_file in dat_files if dat_file not in processed_dats]
         ndats=len(dat_files)
 
         if ncore==None: 
@@ -427,28 +497,46 @@ def main(cmd_args):
         input_args = [(dat_file, datdir, fildir, outdir, obs, sf, count_lock, proc_count, ndats, before, after, tmp_mount) for dat_file in dat_files]
         
         with Pool(num_processes, initializer=worker_configurer, initargs=(log_queue,)) as pool:
-            results = pool.map(dat_to_dataframe, input_args) # starts -> each process gets a node -> when done with node that process is idle
+            # results = pool.map(dat_to_dataframe, input_args) 
+            results = []
+            succeeded = False
+            try:
+                for result in pool.imap_unordered(dat_to_dataframe, input_args): # starts -> each process gets a node -> when done with node that process is idle
+                    results.append(result)
+                succeeded = True
+                    # print(f"Processed and saved: {result}")
+            except: ## in case of error or Ctrl+C saves progress
+                succeeded = False
+                print(f"dat_to_dataframe parallel pool exited during loop. Attempting to save progress. Please do not Ctrl+C again if you want to save this progress.")
+            finally:
+                ## Tell listener to shut down
+                log_queue.put(None) 
+                listener = check_listener(listener)
+                ## Process the results as needed
+                logging.info("Processing results")
+                result_dataframes, hits, skipped, exact_matches = zip(*results)
+                ## if previous progress was loaded, append new results to original results
+                hits = og_hits + hits
+                skipped = og_skipped + skipped
+                exact_matches = og_exact_matches + exact_matches
+                ## save result_dataframes
+                logging.info("Concatenating dataframes and saving to csv...")
+                full_df = pd.concat(result_dataframes, ignore_index=True)
+                if og_full_df is not None:
+                    full_df = pd.concat(og_full_df, full_df, ignore_index=True)
+                if not succeeded: ## if was results were prematurely exited, then save the progress to respective files now
+                    save_results_progress(outdir, obs, full_df, hits, skipped, exact_matches)
+                    raise Exception("Terminated while parallel processing dat files")
+                else:
+                    logging.info("\n*** Finished processing all dat files. ***")
+                    test_dst = os.path.join(outdir, f"{obs}_DOTnbeam.csv")
+                    full_df.to_csv(test_dst)
+                    ## Do something with the counters if needed
+                    total_hits = sum(hits)
+                    total_skipped = sum(skipped)
+                    total_exact_matches = sum(exact_matches)
 
-        logging.info("\n*** Finished processing all dat files. ***")
-        ## Tell listener to shut down
-        log_queue.put(None) 
-        listener = check_listener(listener) 
-
-        ## Process the results as needed
-        logging.info("Processing results")
-        result_dataframes, hits, skipped, exact_matches = zip(*results)
-
-        ## Concatenate the dataframes into a single dataframe
-        logging.info("Concatenating dataframes and saving to csv")
-        full_df = pd.concat(result_dataframes, ignore_index=True)
-        test_dst = os.path.join(os.getcwd(), f"{outdir}{obs}_DOTnbeam.csv")
-        full_df.to_csv(test_dst)
-
-        ## Do something with the counters if needed
-        total_hits = sum(hits)
-        total_skipped = sum(skipped)
-        total_exact_matches = sum(exact_matches)
-
+        
         if sf==None:
             sf=4 
 
