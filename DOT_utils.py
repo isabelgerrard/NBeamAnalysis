@@ -9,12 +9,21 @@ import time
 import os
 import glob
 import argparse
+import sys
 import blimpy as bl
 import logging
-import sys
+from pathlib import Path
+from numba import jit
+import shutil
 
 # logging function
 def setup_logging(log_filename):
+    if not os.path.exists(log_filename):
+        # create parent folder (if dont split then turns filename into a dir)
+        Path('/'.join(log_filename.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
+        # create file
+        open(log_filename, 'w+').close()
+
     # Import the logging module and configure the root logger
     logging.basicConfig(level=logging.INFO, filemode='w', format='%(message)s')
 
@@ -39,6 +48,35 @@ def setup_logging(log_filename):
     logging.getLogger('').handlers = [console_handler, file_handler]
     return None
 
+def get_specific_logger(logfile):
+    """
+    Allows to have multiple logger files. Creates root logger if does not exist. 
+    Allows multiple processes to log without having to synchronize them so they don't block each other. 
+    """
+    if not os.path.exists(logfile):
+        # create parent folder (if dont split then turns filename into a dir)
+        Path('/'.join(logfile.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
+        # create file
+        open(logfile, 'w+').close()
+
+    try: # setup logging if haven't yet
+        root_logger = logging.getLogger()
+    except:
+        setup_logging(logfile)
+        root_logger = logging.getLogger()
+
+    # creates named logger
+    specific_logger = logging.getLogger(logfile)
+
+    # doesn't already exist
+    if not specific_logger.handlers:
+        # Create a file handler that writes to the specified file
+        file_handler = logging.FileHandler(logfile)
+        file_handler.setLevel(logging.INFO)
+        specific_logger.addHandler(file_handler)
+
+    return specific_logger
+
 # elapsed time function
 def get_elapsed_time(start=0):
     end = time.time() - start
@@ -54,17 +92,19 @@ def get_elapsed_time(start=0):
 # check log file for completeness
 def check_logs(log, bliss=False):
     status="fine"
-    if bliss: # prints a million times
-        # print("Logging disabled (likely for functionality between bliss and NBeamAnalysis), see also edit to get_dats")
+    if bliss: 
         return status
     else:
         if not os.path.exists(log):
-            logging.info("Can't find log file...")
+            # logging.info("Can't find log file...")
             return "incomplete"
         searchfile = open(log,'r').readlines()
         if searchfile[-1]!='===== END OF LOG\n':
             status="incomplete"
     return status
+
+def get_beam_code(fil_string):
+    return fil_string.split('beam')[-1].split('.')[0]
 
 # retrieve a list of .dat files, each with the full path of each .dat file for the target beam
 def get_dats(root_dir,beam,bliss):
@@ -73,21 +113,21 @@ def get_dats(root_dir,beam,bliss):
     where each file corresponds to the target beam."""
     errors=0
     dat_files = []
+    if bliss: # print only once
+        print("Logging disabled (likely for functionality between bliss and NBeamAnalysis), see also edit to get_dats")
+    print(f"Walking through root_dir {root_dir} searching for dat files...")
+    
     for dirpath, dirnames, filenames in os.walk(root_dir):
-        # if 'test' in dirpath:
-        #     print(f'Skipping "test" folder:\n{dirpath}')
-        #     continue
-        if bliss:
-            print("Logging disabled (likely for functionality between bliss andd NBeamAnalysis), see also edit to get_dats")
         for f in filenames:
             if f.endswith('.dat') and f.split('beam')[-1].split('.')[0]==beam:
-                if not bliss:
+                if not bliss: # currently bliss does not have log files
                     log_file = os.path.join(dirpath, f).replace('.dat','.log')
                     if check_logs(log_file, bliss=bliss)=="incomplete": #or not os.path.isfile(log_file): <---- this is the edit to get_dats()
-                        logging.info(f"{log_file} is incomplete. Please check it. Skipping this file...")
+                        # logging.info(f"{log_file} is incomplete. Please check it. Skipping this file...")
                         errors+=1
                         continue
                 dat_files.append(os.path.join(dirpath, f))
+
     return dat_files,errors
 
 # load the data from the input .dat file for the target beam and its corresponding .fil files 
@@ -115,14 +155,17 @@ def load_dat_df(dat_file,filtuple):
     return full_dat_df
 
 # use blimpy to grab the data slice from the filterbank file over the frequency range provided
+"""ATTENTION - this takes .5 sec about 1300 calls"""
 def wf_data(fil,f1,f2):
     return bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
 
 # get the normalization factor of a 2D array
+@jit(nopython=True) # should be automatic for vectorized multi dim
 def ACF(s1):
     return ((s1*s1).sum(axis=1)).sum()/np.shape(s1)[0]/np.shape(s1)[1]
 
 # correlate two 2D arrays with a dot product and return the correlation score
+@jit(nopython=True)
 def sig_cor(s1,s2):
     ACF1=ACF(s1)
     ACF2=ACF(s2)
@@ -131,29 +174,54 @@ def sig_cor(s1,s2):
     return x
 
 # get the median of the "noise" after removing the bottom and top 5th percentile of data
+@jit(nopython=True)
 def noise_median(data_array,p=5):
     return np.median(mid_90(data_array,p))
 
 # get the standard deviation of the "noise" after removing the bottom and top 5th percentile of data
+@jit(nopython=True)
 def noise_std(data_array,p=5):
     return np.std(mid_90(data_array,p))
 
 # remove the bottom and top 5th percentile from a data array
+@jit(nopython=True)
 def mid_90(da,p=5):
-    return da[(da>np.percentile(da,p))&(da<np.percentile(da,100-p))]
+    # return da[(da>np.percentile(da,p))&(da<np.percentile(da,100-p))]
+    # jit compatible
+    lower, upper = np.percentile(da,p), np.percentile(da,100-p)
+    filtered_values = []
+    for x in da.ravel():  # Loop over flattened array
+        if lower < x < upper:
+            filtered_values.append(x)
+    return np.array(filtered_values, dtype=da.dtype)
+
+# identify signals significantly above the "noise" in the data
+@jit(nopython=True)
+def signals_sig_above_noise(power, std_noise):
+    # power[(power>10*std_noise)&(power>np.percentile(power,95))] 
+    percentile_95 = np.percentile(power, 95)
+    threshold = 10 * std_noise
+    filtered_values = []
+    for x in power.ravel():  # Loop over flattened array
+        if x > threshold and x > percentile_95:
+            filtered_values.append(x)
+    return np.array(filtered_values, dtype=power.dtype)
 
 # My method for calculating SNR
+@jit(nopython=True)
 def mySNR(power):
     # get the median of the noise
     median_noise=noise_median(power)
     # assume the middle 90 percent of the array represent the noise
-    noise_els=mid_90(power)             
+    noise_els=mid_90(power)        
+    # median_noise=np.median(mid_90)
     # zero out the noise by subtracting off the median
     zeroed_noise=noise_els-median_noise     
     # get the standard deviation of the noise using median instead of mean
     std_noise=np.sqrt(np.median((zeroed_noise)**2))
     # identify signals significantly above the "noise" in the data
-    signal_els=power[(power>10*std_noise)&(power>np.percentile(power,95))] 
+    # signal_els=power[(power>10*std_noise)&(power>np.percentile(power,95))] 
+    signal_els = signals_sig_above_noise(power, std_noise)
     if not bool(signal_els.size):
         # if there are no "signals" popping out above the noise
         # this will result in an SNR of 1
@@ -161,10 +229,14 @@ def mySNR(power):
     else:
         # the signal is calculated as the median of the highest N elements in the signal candidates
         # where N is the number of time bins or rows in the data matrix
-        signal=np.median(sorted(signal_els)[-np.shape(power)[0]:])-median_noise 
+        # signal=np.median(sorted(signal_els)[-np.shape(power)[0]:])-median_noise 
+        signal=np.median(np.sort(signal_els)[-np.shape(power)[0]:])-median_noise # jit compatible - sorted makes python list
     # subtract off the median (previous step) and divide by the standard deviation to get the SNR
-    SNR=signal/std_noise
+    SNR = signal/std_noise
     return SNR
+
+def cleanup_tmp_buf(tmp_fil_loc):
+    os.remove(tmp_fil_loc)
 
 # extract index and dataframe from pickle files to resume from last checkpoint
 def resume(pickle_file, df):
@@ -173,82 +245,119 @@ def resume(pickle_file, df):
         # If a checkpoint file exists, load the dataframe and row index from the file
         with open(pickle_file, "rb") as f:
             index, df = pickle.load(f)
-        logging.info(f'\t***pickle checkpoint file found. Resuming from step {index+1}\n')
+        # logging.info(f'\t***pickle checkpoint file found. Resuming from step {index+1}\n')
     return index, df
 
 # comb through each hit in the dataframe and look for corresponding hits in each of the beams.
-def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4):
+# def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4):
+def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False, sf=4, proc_count=0, tmp_loc=None): # TODO debug only
     if sf==None:
         sf=4
-    # loop over every row in the dataframe
-    for r,row in df.iterrows():
+    """
+    Same target_fil for every row in a given data frame = always same metadata
+    Don't recalc metadata constants for each hit
+    """
+
+    # identify the target beam .fil file
+    first_row = df.iloc[0]
+    matching_col = first_row.filter(like='fil_').apply(lambda x: x == first_row['dat_name']).idxmax()
+    target_fil = first_row[matching_col]
+    
+    if tmp_loc is not None:
+        target_fil = os.path.join(tmp_loc, os.path.basename(target_fil))
+
+    curr_proc_logger = logging.getLogger(f'worker_{proc_count}')
+
+    try:
+        fil_meta = bl.Waterfall(target_fil,load_data=False)
+    except Exception as e:
+        curr_proc_logger.warning(f"Failed to load fil meta with bl.Waterfall for {target_fil} - skipping this node...")
+        curr_proc_logger.info(e)
+        return
+    
+    ## determine the frequency boundaries in the .fil file
+    minimum_frequency = fil_meta.container.f_start
+    maximum_frequency = fil_meta.container.f_stop
+    ## calculate the narrow signal window using the reported drift rate and metadata
+    tsamp = fil_meta.header['tsamp']    # time bin length in seconds
+    obs_length=fil_meta.n_ints_in_file * tsamp # total length of observation in seconds
+
+    ## get a list of all the other fil files for all the other beams
+    other_cols = first_row.loc[first_row.index.str.startswith('fil_') & (first_row.index != matching_col)]
+    other_fils = other_cols.values # this is index object - can use tolist()
+    if tmp_loc is not None:
+        other_fils = [os.path.join(tmp_loc, os.path.basename(other_fil)) for other_fil in other_fils]
+
+    beam_codes = [get_beam_code(fil) for fil in other_fils]
+    col_name_corrs=[f'corrs_{beam}' for beam in beam_codes] 
+    col_name_SNRr=[f'SNR_ratio_{beam}' for beam in beam_codes]
+
+    num_rows = len(df)
+    for r,row in df.iterrows(): # each hit
+        if r%200==0: print(f"\t[{proc_count}] {r}/{num_rows}") 
         if resume_index is not None and r < resume_index:
             continue  # skip rows before the resume index
-        # identify the target beam .fil file 
-        matching_col = row.filter(like='fil_').apply(lambda x: x == row['dat_name']).idxmax()
-        target_fil = row[matching_col]
-        # get the filterbank metadata
-        fil_meta = bl.Waterfall(target_fil,load_data=False)
-        # determine the frequency boundaries in the .fil file
-        minimum_frequency = fil_meta.container.f_start
-        maximum_frequency = fil_meta.container.f_stop
-        # calculate the narrow signal window using the reported drift rate and metadata
-        tsamp = fil_meta.header['tsamp']    # time bin length in seconds
-        obs_length=fil_meta.n_ints_in_file * tsamp # total length of observation in seconds
+
+        ## calculate the narrow signal window using the reported drift rate and metadata
         DR = row['Drift_Rate']              # reported drift rate
         padding=1+np.log10(row['SNR'])/10   # padding based on reported strength of signal
-        # calculate the amount of frequency drift with some padding
+        ## calculate the amount of frequency drift with some padding
         half_span=abs(DR)*obs_length*padding  
         if half_span<250:
             half_span=250 # minimum 500 Hz span window
         fmid = row['Corrected_Frequency']
-        # signal may not be centered, could drift up or down in frequency space
-        # so the frequency drift is added to both sides of the central frequency
-        # to ensure it is contained within the window
+        ## signal may not be centered, could drift up or down in frequency space
+        ## so the frequency drift is added to both sides of the central frequency
+        ## to ensure it is contained within the window
         f1=round(max(fmid-half_span*1e-6,minimum_frequency),6)
         f2=round(min(fmid+half_span*1e-6,maximum_frequency),6)
-        # grab the signal data in the target beam fil file
-        frange,s0=wf_data(target_fil,f1,f2)
-        # calculate the SNR
+
+        ## now set f_start and f_stop of the waterfall and call read_data 
+        ## then grab data for frange,s0
+        frange,s0=wf_data(target_fil,f1,f2) # bl.Waterfall(fil,f1,f2).grab_data(f1,f2)
+        
+        ## calculate the SNR
         SNR0 = mySNR(s0)
-        # get a list of all the other fil files for all the other beams
-        other_cols = row.loc[row.index.str.startswith('fil_') & (row.index != matching_col)]
-        # initialize empty lists for appending
-        # xs=[] # no longer used
+        
+        ## get a list of all the other fil files for all the other beams
+        ## other_cols = row.loc[row.index.str.startswith('fil_') & (row.index != matching_col)]
+        ## initialize empty lists for appending
         corrs=[]
         mySNRs=[SNR0]
         SNR_ratios=[]
-        for col_name, other_fil in other_cols.iteritems():
-            # grab the signal data from the non-target fil in the same location
+        for other_fil in other_fils: #iteritems deprecated
+            ## grab the signal data from the non-target fil in the same location
             _,s1=wf_data(other_fil,f1,f2)
-            # calculate and append the SNR for the same location in the other beam
+            ## just grabbing data in that range without completely reloading wf again
+            ## calculate and append the SNR for the same location in the other beam
             off_SNR = mySNR(s1)
             mySNRs.append(off_SNR)
-            # calculate and append the SNR ratio
+            ## calculate and append the SNR ratio
             SNR_ratios.append(SNR0/off_SNR)
-            # calculate and append the correlation score
+            ## calculate and append the correlation score
             corrs.append(sig_cor(s0-noise_median(s0),s1-noise_median(s1)))
-            # x scores no longer used
-            # xs.append(min(corrs[-1]/(SNR_ratios[-1]/sf),1.0)) 
-        # add the correlation scores, SNRs and SNR-ratios to the dataframe
-        for i,x in enumerate(SNR_ratios):
-            col_name_corrs='corrs_'+other_cols[i].split('beam')[-1].split('.')[0]
-            df.loc[r,col_name_corrs] = corrs[i]
-            col_name_SNRr='SNR_ratio_'+other_cols[i].split('beam')[-1].split('.')[0]
-            df.loc[r,col_name_SNRr] = SNR_ratios[i]
-            # col_name_x = 'x_'+other_cols[i].split('beam')[-1].split('.')[0]
-            # df.loc[r,col_name_x] = x
+
+        df.loc[r,col_name_corrs] = corrs
+        df.loc[r,col_name_SNRr] = SNR_ratios
         df.loc[r,'mySNRs'] = str(mySNRs)
-        # calculate and add average values to the dataframe (useful for N>2 beams)
+
+        ## calculate and add average values to the dataframe (useful for N>2 beams)
         if len(SNR_ratios)>0:
             df.loc[r,'corrs'] = sum(corrs)/len(corrs) 
             df.loc[r,'SNR_ratio'] = sum(SNR_ratios)/len(SNR_ratios)  
-            # df.loc[r,'x'] = sum(xs)/len(xs)                          
-        # pickle the dataframe and row index for resuming
-        if pickle_off==False:
+        ## pickle the dataframe and row index for resuming
+        if not pickle_off:
             with open(outdir+f'{obs}_comb_df.pkl', 'wb') as f:
-                pickle.dump((r, df), f) 
-    # remove the pickle checkpoint file after all loops complete
+                pickle.dump((r, df), f)
+    
+    ## Done with this scan (both beams) can remove from temporary buf location 
+    if tmp_loc is not None:
+        cleanup_tmp_buf(target_fil)
+        for other_fil in other_fils:
+            # print(f"Cleaning up {other_fil}")
+            cleanup_tmp_buf(other_fil)
+
+    ## remove the pickle checkpoint file after all loops complete
     if os.path.exists(outdir+f"{obs}_comb_df.pkl"):
         os.remove(outdir+f"{obs}_comb_df.pkl") 
     return df
@@ -256,7 +365,7 @@ def comb_df(df, outdir='./', obs='UNKNOWN', resume_index=None, pickle_off=False,
 # cross reference hits in the target beam dat with the other beams dats for identical signals
 def cross_ref(input_df,sf):
     if len(input_df)==0:
-        logging.info("\tNo hits in the input dataframe to cross reference.")
+        # logging.info("\tNo hits in the input dataframe to cross reference.")
         return input_df
     # first, make sure the indices are reset
     input_df=input_df.reset_index(drop=True)
@@ -303,7 +412,7 @@ def cross_ref(input_df,sf):
 # not complete or implemented anywhere
 def drop_fscrunch_duplicates(input_df,frez=1,time_rez=16):
     if len(input_df)==0:
-        logging.info("\tNo hits in the input dataframe to cross reference.")
+        # logging.info("\tNo hits in the input dataframe to cross reference.")
         return input_df
     # first, make sure the indices are reset
     input_df=input_df.reset_index(drop=True)

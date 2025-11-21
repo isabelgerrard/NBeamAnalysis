@@ -2,6 +2,7 @@
 	path = src/blimpy
 	# url = https://github.com/UCBerkeleySETI/blimpy.git
 	url = git@github.com:isabelgerrard/blimpy.git
+	branch = stable
 	# branch = no-blimpy-changes
 # [submodule "src/blimpy"]
 # 	branch = no-blimpy-changes

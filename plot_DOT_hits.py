@@ -196,6 +196,28 @@ def filter_df(df,column,operator,value):
     signals_of_interest = signals_of_interest.sort_values(by=column,ascending=False).reset_index(drop=True)
     return signals_of_interest
 
+def reverse_filter(df, sf_max, cutnum, num_backup_plots):
+    print(f"\nReversed filtering:")
+    print(f"Up to the {cutnum} HIGHEST correlation scores with an SNR-ratio BELOW the attenuation value of {sf_max:.2f}\n")
+    print(f"Barring that, up to the {num_backup_plots} below the cutoff will be plotted")
+    xcutoff=np.linspace(-0.05,1.05,1000)
+    ycutoff=np.array([0.9*sf_max*max(j-0.05,0)**(1/3) for j in xcutoff])
+    dfx=df[np.interp(df.corrs,xcutoff,ycutoff)>df.SNR_ratio].reset_index(drop=True)
+    # Sort by SNR *ratio* between on and off - ascending
+    dfx=dfx.sort_values(by='SNR_ratio',ascending=True).reset_index(drop=True)  
+    dfsf=dfx[dfx.SNR_ratio<sf_max].reset_index(drop=True)
+    # if more than cutnum hits below the SNR ratio sf_max 
+    if len(dfsf)>cutnum:
+        # then sort by correlation score (x axis)
+        signals_of_interest = dfsf.sort_values(by='corrs',ascending=False).reset_index(drop=True).iloc[:cutnum]
+    else:
+        signals_of_interest = dfsf.iloc[:cutnum]
+    # or else if nothing below sf_max then ignore cutnum and sort by correlation
+    if signals_of_interest.empty==True:
+        print(f"Warning: Reversed filtering produced an empty dataset. Reverting to highest scores of the original dataset.\n")
+        signals_of_interest = dfx.sort_values(by='corrs',ascending=False).reset_index(drop=True).iloc[:num_backup_plots]
+    return signals_of_interest
+
 # default filtering
 def default_filter(df,sf,cutnum,num_backup_plots):
     print(f"\nDefault filtering:")
@@ -205,12 +227,12 @@ def default_filter(df,sf,cutnum,num_backup_plots):
     ycutoff=np.array([0.9*sf*max(j-0.05,0)**(1/3) for j in xcutoff])
     dfx=df[np.interp(df.corrs,xcutoff,ycutoff)<df.SNR_ratio].reset_index(drop=True)
     # Sort by SNR *ratio* between on and off - descending
-    dfx=dfx.sort_values(by='SNR_ratio',ascending=False).reset_index(drop=True)
+    dfx=dfx.sort_values(by='SNR_ratio',ascending=False).reset_index(drop=True) 
     dfsf=dfx[dfx.SNR_ratio>sf].reset_index(drop=True)
     # if more than cutnum hits above the SNR ratio sf 
     if len(dfsf)>cutnum:
         # then sort by correlation score (x axis)
-        signals_of_interest = dfsf.sort_values(by='corrs',ascending=True).reset_index(drop=True).iloc[:cutnum]
+        signals_of_interest = dfsf.sort_values(by='corrs',ascending=True).reset_index(drop=True).iloc[:cutnum] 
     else:
         signals_of_interest = dfsf.iloc[:cutnum]
     # or else if nothing above sf then ignore cutnum and sort by correlation
@@ -420,6 +442,7 @@ def main(cmd_args):
     end, time_label = get_elapsed_time(start)
     print(f"\n\t{len(signals_of_interest)} hits plotted in %.2f {time_label}.\n" %end)
     return None
+
 # run it!
 if __name__ == "__main__":
     cmd_args = parse_args()
