@@ -200,7 +200,8 @@ def check_listener(listener):
         listener.join(timeout=5)
         if listener.is_alive():
             print("Listener join timed out.")
-        listener.close()
+        else:
+            listener.close()
     return listener
 
 def load_results_progress(outdir, obs):
@@ -509,9 +510,6 @@ def main(cmd_args):
                 succeeded = False
                 print(f"dat_to_dataframe parallel pool exited during loop. Attempting to save progress. Please do not Ctrl+C again if you want to save this progress.")
             finally:
-                ## Tell listener to shut down
-                log_queue.put(None) 
-                listener = check_listener(listener)
                 ## Process the results as needed
                 logging.info("Processing results")
                 result_dataframes, hits, skipped, exact_matches = zip(*results)
@@ -523,7 +521,7 @@ def main(cmd_args):
                 logging.info("Concatenating dataframes and saving to csv...")
                 full_df = pd.concat(result_dataframes, ignore_index=True)
                 if og_full_df is not None:
-                    full_df = pd.concat(og_full_df, full_df, ignore_index=True)
+                    full_df = pd.concat([og_full_df, full_df], ignore_index=True)
                 if not succeeded: ## if was results were prematurely exited, then save the progress to respective files now
                     save_results_progress(outdir, obs, full_df, hits, skipped, exact_matches)
                     raise Exception("Terminated while parallel processing dat files")
@@ -535,6 +533,9 @@ def main(cmd_args):
                     total_hits = sum(hits)
                     total_skipped = sum(skipped)
                     total_exact_matches = sum(exact_matches)
+                ## Tell listener to shut down
+                log_queue.put(None) 
+                listener = check_listener(listener)
 
         
         if sf==None:
