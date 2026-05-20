@@ -189,7 +189,7 @@ def make_title(fig,MJD,f2,fmid,drift_rate,SNR,corrs,SNRr,x=None):
     # if x:
     #     title+=f' || X score: {x:.3f}'
     #     filename+=f"_X_{x:.3f}"
-    fig.suptitle(title,size=25)
+    fig.suptitle(title, size=25)
     return filename
 
 def customize_subplot_frame(ax, linewidth=8, color='r'):
